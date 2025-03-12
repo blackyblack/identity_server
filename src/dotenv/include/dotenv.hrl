@@ -1,0 +1,1 @@
+-type config() :: #{binary() => binary()}.

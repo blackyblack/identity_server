@@ -1,0 +1,14 @@
+{application, identity_server, [
+    {description, "Identity HTTP service"},
+    {vsn, "0.1.0"},
+    {registered, []},
+    {mod, {identity_server_app, []}},
+    {applications, [
+        kernel,
+        stdlib
+    ]},
+    {env, []},
+    {modules, []},
+    {licenses, ["Apache-2.0"]},
+    {links, []}
+ ]}.

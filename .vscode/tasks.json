@@ -1,0 +1,22 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "rebar3 compile",
+            "type": "shell",
+            "options": {
+                "env": {
+                    "CFLAGS": "-I \"c:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.22621.0\\ucrt\" -I \"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.43.34808\\include\"",
+                    "CXXFLAGS": "-I \"c:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.22621.0\\ucrt\" -I \"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.43.34808\\include\"",
+                    "LDFLAGS": "/LIBPATH:\"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.43.34808\\lib\\x64\" /LIBPATH:\"C:\\Program Files (x86)\\Windows Kits\\10\\Lib\\10.0.22621.0\\um\\x64\" /LIBPATH:\"C:\\Program Files (x86)\\Windows Kits\\10\\Lib\\10.0.22621.0\\ucrt\\x64\"",
+                }
+            },
+            "command": "rebar3 compile",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": "$erlang"
+        }
+    ]
+}

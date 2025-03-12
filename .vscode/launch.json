@@ -1,0 +1,13 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug",
+            "type": "erlang",
+            "request": "launch",
+            "cwd": "${workspaceRoot}",
+            "arguments": "-eval \"application:start(identity_server)\" -config config/sys.config",
+            "preLaunchTask": "rebar3 compile"
+        }
+    ]
+}
