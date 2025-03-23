@@ -8,13 +8,23 @@
 
 start(_StartType, _StartArgs) ->
     ok = dotenv:init(),
+    {ok, _} = application:ensure_all_started(cowboy),
     Port = case os:getenv("PORT") of
         false -> ?DEFAULT_PORT;
         P -> list_to_integer(P)
     end,
-    Ret = identity_server_sup:start_link(#args{port = Port}),
+    Dispatch = cowboy_router:compile([
+		{'_', [
+			{"/vouch/:user", vouch_handler, []},
+            {'_', notfound_handler, []}
+		]}
+	]),
+	{ok, Pid} = cowboy:start_clear(http, [{port, Port}], #{
+		env => #{dispatch => Dispatch}
+	}),
+    ets:new(identity_nonce_consumed, [set, public, named_table]),
     app_logger:info("Identity server started at localhost:~p", [Port]),
-    Ret.
+    {ok, Pid}.
 
 stop(_State) ->
-    ok.
+    ok = cowboy:stop_listener(http).

@@ -73,14 +73,23 @@ apply_defaults(UserConfig) ->
 format(#{level := Level, msg := Msg, meta := Metadata}, Config) ->
     format(Msg, Level, Metadata, Config).
 
-format({Format, Args}, Level, Metadata, Config) ->
+format({report, #{format := Format, args := Args}}, Level, Metadata, Config) ->
+    format({Format, Args}, Level, Metadata, Config);
+
+format({report, #{report := Report}}, Level, Metadata, Config) when is_list(Report) ->
+    format({report, maps:from_list(Report)}, Level, Metadata, Config);
+
+format({report, Msg}, Level, Metadata, Config) when is_map(Msg) ->
     NewConfig = logjam_formatter:apply_defaults(Config),
     #{template := Template} = NewConfig,
     NewMetadata = maps:merge(Metadata, #{
         level => Level,
         colored_start => Level,
         colored_end => ?COLOR_END}),
-    logjam_formatter:format_log(Template, NewConfig, #{text => logjam_formatter:format_to_binary(Format, Args)}, NewMetadata).
+    logjam_formatter:format_log(Template, NewConfig, Msg, NewMetadata);
+
+format({Format, Args}, Level, Metadata, Config) ->
+    format({report, #{text => logjam_formatter:format_to_binary(Format, Args)}}, Level, Metadata, Config).
 
 format_log(Tpl, Config, Msg, Meta) -> format_log(Tpl, Config, Msg, Meta, []).
 
@@ -231,30 +240,7 @@ format_str(#{term_depth := undefined}, T) ->
 format_str(#{term_depth := D}, T) ->
     io_lib:format("~0tP", [T, D]).
 
-escape(Str) ->
-    % io:format("Checking to escape ~p~n", [Str]),
-    case needs_escape(Str) of
-        false -> Str;
-        true ->
-            [$", do_escape(Str), $"]
-    end.
-
-needs_escape(Str) ->
-    string:find(Str, "\"") =/= nomatch orelse
-    string:find(Str, "\\") =/= nomatch orelse
-    string:find(Str, "\n") =/= nomatch.
-
-do_escape([]) ->
-    [];
-do_escape(Str) ->
-    % io:format("Escaping string: ~p~n", [Str]),
-    case string:next_grapheme(Str) of
-        [$\n | Rest] -> [$\\, $\n | do_escape(Rest)];
-        ["\r\n" | Rest] -> [$\\, $\r, $\\, $\n | do_escape(Rest)];
-        [$" | Rest] -> [$\\, $" | do_escape(Rest)];
-        [$\\ | Rest] -> [$\\, $\\ | do_escape(Rest)];
-        [Grapheme | Rest] -> [Grapheme | do_escape(Rest)]
-    end.
+escape(Str) -> Str.
 
 truncate_key([]) -> [];
 truncate_key("_") -> "";
