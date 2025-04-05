@@ -8,6 +8,14 @@
             "cwd": "${workspaceRoot}",
             "arguments": "-eval \"application:start(identity_server)\" -config config/sys.config",
             "preLaunchTask": "rebar3 compile"
+        },
+        {
+            "name": "Test Current Suite",
+            "type": "erlang",
+            "request": "launch",
+            "cwd": "${workspaceRoot}",
+            "arguments": "-noshell -s ct_run script_start -config ./config/sys.config -pa ./_build/default/lib/cowboy/ebin -pa ./_build/default/lib/cowlib/ebin -pa ./_build/default/lib/ranch/ebin -pa ./_build/default/lib/erl_base58/ebin -no_auto_compile -suite ${fileBasenameNoExtension} -logdir ../ct_tmp -dir ./_build/default/lib/identity_server/test",
+            "preLaunchTask": "rebar3 compile"
         }
     ]
 }

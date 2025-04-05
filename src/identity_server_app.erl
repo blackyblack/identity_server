@@ -7,7 +7,7 @@
 -define(DEFAULT_PORT, 8000).
 
 start(_StartType, _StartArgs) ->
-    ok = dotenv:init(),
+    dotenv:init(),
     {ok, _} = application:ensure_all_started(cowboy),
     Port = case os:getenv("PORT") of
         false -> ?DEFAULT_PORT;
@@ -23,6 +23,7 @@ start(_StartType, _StartArgs) ->
 		env => #{dispatch => Dispatch}
 	}),
     ets:new(identity_nonce_consumed, [set, public, named_table]),
+    ets:new(vouches, [set, public, named_table]),
     app_logger:info("Identity server started at localhost:~p", [Port]),
     {ok, Pid}.
 
