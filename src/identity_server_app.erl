@@ -19,13 +19,14 @@ start(_StartType, _StartArgs) ->
             {'_', notfound_handler, []}
 		]}
 	]),
-	{ok, Pid} = cowboy:start_clear(http, [{port, Port}], #{
+	{ok, _Pid} = cowboy:start_clear(http, [{port, Port}], #{
 		env => #{dispatch => Dispatch}
 	}),
     ets:new(identity_nonce_consumed, [set, public, named_table]),
     ets:new(vouches, [set, public, named_table]),
     app_logger:info("Identity server started at localhost:~p", [Port]),
-    {ok, Pid}.
+    % cowboy does not stop without supervisor link
+    identity_server_sup:start_link().
 
 stop(_State) ->
-    ok = cowboy:stop_listener(http).
+    cowboy:stop_listener(http).
