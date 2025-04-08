@@ -16,6 +16,8 @@ start(_StartType, _StartArgs) ->
     Dispatch = cowboy_router:compile([
 		{'_', [
 			{"/vouch/:user", vouch_handler, []},
+            {"/idt/:user", idt_handler, []},
+            {"/proof/:user", proof_handler, []},
             {'_', notfound_handler, []}
 		]}
 	]),
@@ -23,7 +25,14 @@ start(_StartType, _StartArgs) ->
 		env => #{dispatch => Dispatch}
 	}),
     ets:new(identity_nonce_consumed, [set, public, named_table]),
+    ets:new(proof_nonce_consumed, [set, public, named_table]),
     ets:new(vouches, [set, public, named_table]),
+    ets:new(moderators, [set, public, named_table]),
+    ets:new(id_proofs, [set, public, named_table]),
+    % TODO: add admins
+    % TODO: load admins from ENV
+    % TODO: remove hardcoded moderator
+    moderators:add_moderator(<<"8pYfL3PjD6kDgCBj5EEwmRsjhMA57qd5h4HygteaZ25Y">>),
     app_logger:info("Identity server started at localhost:~p", [Port]),
     % cowboy does not stop without supervisor link
     identity_server_sup:start_link().
