@@ -1,6 +1,12 @@
 -module(identity_signature).
 
--export([is_nonce_consumed/2, verify_and_consume_signature/5, vouch_signature_message/2, proof_signature_message/3]).
+-export([
+    is_nonce_consumed/2,
+    verify_and_consume_signature/5,
+    vouch_signature_message/2,
+    proof_signature_message/4,
+    moderators_signature_message/2
+]).
 
 -spec is_nonce_consumed(Nonces :: [integer()], integer()) -> boolean().
 is_nonce_consumed([], _Nonce) -> false;
@@ -18,7 +24,8 @@ is_nonce_consumed(_Nonces, _Nonce) -> true.
 verify_and_consume_signature(Action, SignatureEncoded, PublicKeyEncoded, Nonce, Message) ->
     Table = case Action of
         vouch -> identity_nonce_consumed;
-        proof -> proof_nonce_consumed
+        proof -> proof_nonce_consumed;
+        moderators -> moderators_nonce_consumed
     end,
     maybe
         ok ?= case identity_signature:is_nonce_consumed(ets:lookup(Table, PublicKeyEncoded), Nonce) of
@@ -39,6 +46,16 @@ verify_and_consume_signature(Action, SignatureEncoded, PublicKeyEncoded, Nonce, 
 vouch_signature_message(UserEncoded, Nonce) ->
     list_to_binary(string:join(["vouch", binary_to_list(UserEncoded), integer_to_list(Nonce)], "/")).
 
--spec proof_signature_message(UserEncoded :: binary(), Nonce :: integer(), Balance :: integer()) -> binary().
-proof_signature_message(UserEncoded, Nonce, Balance) ->
-    list_to_binary(string:join(["proof", binary_to_list(UserEncoded), integer_to_list(Nonce), integer_to_list(Balance)], "/")).
+-spec proof_signature_message(UserEncoded :: binary(), Nonce :: integer(), Balance :: integer(), ProofId :: binary()) -> binary().
+proof_signature_message(UserEncoded, Nonce, Balance, ProofId) ->
+    list_to_binary(string:join([
+        "proof",
+        binary_to_list(UserEncoded),
+        integer_to_list(Nonce),
+        integer_to_list(Balance),
+        binary_to_list(ProofId)
+    ], "/")).
+
+-spec moderators_signature_message(UserEncoded :: binary(), Nonce :: integer()) -> binary().
+moderators_signature_message(UserEncoded, Nonce) ->
+    list_to_binary(string:join(["moderators", binary_to_list(UserEncoded), integer_to_list(Nonce)], "/")).

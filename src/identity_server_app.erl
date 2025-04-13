@@ -7,7 +7,7 @@
 -define(DEFAULT_PORT, 8000).
 
 start(_StartType, _StartArgs) ->
-    dotenv:init(),
+    identity_server:setup(),
     {ok, _} = application:ensure_all_started(cowboy),
     Port = case os:getenv("PORT") of
         false -> ?DEFAULT_PORT;
@@ -18,21 +18,16 @@ start(_StartType, _StartArgs) ->
 			{"/vouch/:user", vouch_handler, []},
             {"/idt/:user", idt_handler, []},
             {"/proof/:user", proof_handler, []},
+            {"/is_moderator/:user", is_moderator_handler, []},
+            {"/add_moderator/:user", add_moderator_handler, []},
+            {"/remove_moderator/:user", remove_moderator_handler, []},
             {'_', notfound_handler, []}
 		]}
 	]),
 	{ok, _Pid} = cowboy:start_clear(http, [{port, Port}], #{
 		env => #{dispatch => Dispatch}
 	}),
-    ets:new(identity_nonce_consumed, [set, public, named_table]),
-    ets:new(proof_nonce_consumed, [set, public, named_table]),
-    ets:new(vouches, [set, public, named_table]),
-    ets:new(moderators, [set, public, named_table]),
-    ets:new(id_proofs, [set, public, named_table]),
-    % TODO: add admins
-    % TODO: load admins from ENV
-    % TODO: remove hardcoded moderator
-    moderators:add_moderator(<<"8pYfL3PjD6kDgCBj5EEwmRsjhMA57qd5h4HygteaZ25Y">>),
+    moderators:add_moderator(<<"8pYfL3PjD6kDgCBj5EEwmRsjhMA57qd5h4HygteaZ25Y">>, <<"8pYfL3PjD6kDgCBj5EEwmRsjhMA57qd5h4HygteaZ25Y">>),
     app_logger:info("Identity server started at localhost:~p", [Port]),
     % cowboy does not stop without supervisor link
     identity_server_sup:start_link().

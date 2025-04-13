@@ -1,9 +1,11 @@
 -module(identity).
 
--export([vouch/2, idt/1, set_idt_by_proof/3]).
+-export([vouch/2, idt/1, set_idt_by_proof/4]).
 
 -define(TOP_VOUCHERS_SIZE, 5).
 -define(MAX_IDT_BY_PROOF, 50000).
+% reduce IDT by this coefficient for vouchee. So each level of vouch inherits voucher balance multiplied by this coefficient.
+-define(IDT_REDUCE_BY_LEVEL_COEFFICIENT, 0.1).
 
 %TODO: might require to migrate to gen_server to make IDT updates atomic
 
@@ -20,7 +22,7 @@ idt(User) ->
 
 % Priviledged method. Should be called by admin or moderator after proof verification.
 % Proof should be publicly verifiable, probably with ZK proof.
-set_idt_by_proof(Moderator, User, Balance) ->
+set_idt_by_proof(Moderator, User, Balance, ProofId) ->
     maybe
         ok ?= case moderators:is_moderator(Moderator) of
             false -> {error, not_allowed};
@@ -30,7 +32,7 @@ set_idt_by_proof(Moderator, User, Balance) ->
             true -> {error, max_balance_exceeded};
             _ -> ok
         end,
-        ets:insert(id_proofs, {User, Balance, erlang:monotonic_time()}),
+        ets:insert(id_proofs, {User, Balance, erlang:monotonic_time(), ProofId}),
         ok
     end.
 
@@ -63,11 +65,11 @@ user_idt_from_vouchers([]) ->
     0;
 
 user_idt_from_vouchers(Vouchers) ->
-    Idt = lists:foldl(fun({_UserV, Balance, _TimeV}, TotalBalance) -> TotalBalance + Balance * 0.1 end, 0, Vouchers),
+    Idt = lists:foldl(fun({_UserV, Balance, _TimeV}, TotalBalance) -> TotalBalance + Balance * ?IDT_REDUCE_BY_LEVEL_COEFFICIENT end, 0, Vouchers),
     trunc(math:ceil(Idt)).
 
 user_idt_from_proof(User) ->
-    ProvedBalance = ets:match(id_proofs, {User, '$1', '$2'}),
+    ProvedBalance = ets:match(id_proofs, {User, '$1', '$2', '_'}),
     case ProvedBalance of
         [] -> 0;
         [[Balance, _Time]] -> Balance;

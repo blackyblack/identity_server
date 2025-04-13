@@ -20,3 +20,6 @@ rebar3.crashdump
 *~
 .env
 *.lock
+admins.json
+moderators.json
+genesis.json

@@ -1,7 +1,7 @@
 Identity_server
 =====
 
-An OTP application
+Network of trust implementation as web service.
 
 Build
 -----
