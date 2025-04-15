@@ -5,7 +5,8 @@
     verify_and_consume_signature/5,
     vouch_signature_message/2,
     proof_signature_message/4,
-    moderators_signature_message/2
+    moderators_signature_message/2,
+    admins_signature_message/2
 ]).
 
 -spec is_nonce_consumed(Nonces :: [integer()], integer()) -> boolean().
@@ -15,7 +16,7 @@ is_nonce_consumed([{_User, LastNonce}], Nonce) -> Nonce =< LastNonce;
 is_nonce_consumed(_Nonces, _Nonce) -> true.
 
 -spec verify_and_consume_signature(Action, SignatureEncoded, PublicKeyEncoded, Nonce, Message) -> ok | Error when
-    Action :: vouch | proof,
+    Action :: vouch | proof | moderators | admins,
     SignatureEncoded :: binary(),
     PublicKeyEncoded :: binary(),
     Nonce :: integer(),
@@ -25,7 +26,8 @@ verify_and_consume_signature(Action, SignatureEncoded, PublicKeyEncoded, Nonce, 
     Table = case Action of
         vouch -> identity_nonce_consumed;
         proof -> proof_nonce_consumed;
-        moderators -> moderators_nonce_consumed
+        moderators -> moderators_nonce_consumed;
+        admins -> admins_nonce_consumed
     end,
     maybe
         ok ?= case identity_signature:is_nonce_consumed(ets:lookup(Table, PublicKeyEncoded), Nonce) of
@@ -59,3 +61,7 @@ proof_signature_message(UserEncoded, Nonce, Balance, ProofId) ->
 -spec moderators_signature_message(UserEncoded :: binary(), Nonce :: integer()) -> binary().
 moderators_signature_message(UserEncoded, Nonce) ->
     list_to_binary(string:join(["moderators", binary_to_list(UserEncoded), integer_to_list(Nonce)], "/")).
+
+-spec admins_signature_message(UserEncoded :: binary(), Nonce :: integer()) -> binary().
+admins_signature_message(UserEncoded, Nonce) ->
+    list_to_binary(string:join(["admins", binary_to_list(UserEncoded), integer_to_list(Nonce)], "/")).

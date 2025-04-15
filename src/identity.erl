@@ -1,11 +1,13 @@
 -module(identity).
 
--export([vouch/2, idt/1, set_idt_by_proof/4]).
+-export([vouch/2, idt/1, set_idt_by_proof/4, set_idt_by_config/2]).
 
 -define(TOP_VOUCHERS_SIZE, 5).
 -define(MAX_IDT_BY_PROOF, 50000).
 % reduce IDT by this coefficient for vouchee. So each level of vouch inherits voucher balance multiplied by this coefficient.
 -define(IDT_REDUCE_BY_LEVEL_COEFFICIENT, 0.1).
+% this proof id is set for initial user balances
+-define(GENESIS_PROOF_ID, <<"0">>).
 
 %TODO: might require to migrate to gen_server to make IDT updates atomic
 
@@ -20,7 +22,7 @@ idt(User) ->
     {Idt, _} = idt_visited(User, sets:new()),
     Idt.
 
-% Priviledged method. Should be called by admin or moderator after proof verification.
+% Should be called by moderator after proof verification.
 % Proof should be publicly verifiable, probably with ZK proof.
 set_idt_by_proof(Moderator, User, Balance, ProofId) ->
     maybe
@@ -35,6 +37,9 @@ set_idt_by_proof(Moderator, User, Balance, ProofId) ->
         ets:insert(id_proofs, {User, Balance, erlang:monotonic_time(), ProofId}),
         ok
     end.
+
+set_idt_by_config(User, Balance) ->
+    ets:insert(id_proofs, {User, Balance, erlang:monotonic_time(), ?GENESIS_PROOF_ID}).
 
 idt_visited(User, Visited) ->
     case sets:is_element(User, Visited) of

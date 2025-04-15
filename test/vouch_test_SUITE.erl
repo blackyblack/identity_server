@@ -20,7 +20,7 @@ all() -> [
 
 init_per_suite(Config) ->
     application:start(identity_server),
-    admins:add_admin(?ADMIN),
+    admins:add_admin_from_config(?ADMIN),
     moderators:add_moderator(?ADMIN, ?MODERATOR),
     Config.
 
