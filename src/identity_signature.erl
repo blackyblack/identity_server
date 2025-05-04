@@ -5,6 +5,7 @@
     verify_and_consume_signature/5,
     vouch_signature_message/2,
     proof_signature_message/4,
+    punish_signature_message/4,
     moderators_signature_message/2,
     admins_signature_message/2
 ]).
@@ -52,6 +53,16 @@ vouch_signature_message(UserEncoded, Nonce) ->
 proof_signature_message(UserEncoded, Nonce, Balance, ProofId) ->
     list_to_binary(string:join([
         "proof",
+        binary_to_list(UserEncoded),
+        integer_to_list(Nonce),
+        integer_to_list(Balance),
+        binary_to_list(ProofId)
+    ], "/")).
+
+-spec punish_signature_message(UserEncoded :: binary(), Nonce :: integer(), Balance :: integer(), ProofId :: binary()) -> binary().
+punish_signature_message(UserEncoded, Nonce, Balance, ProofId) ->
+    list_to_binary(string:join([
+        "punish",
         binary_to_list(UserEncoded),
         integer_to_list(Nonce),
         integer_to_list(Balance),

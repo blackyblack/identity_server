@@ -18,6 +18,7 @@ start(_StartType, _StartArgs) ->
 			{"/vouch/:user", vouch_handler, []},
             {"/idt/:user", idt_handler, []},
             {"/proof/:user", proof_handler, []},
+            {"/punish/:user", punish_handler, []},
             {"/is_moderator/:user", is_moderator_handler, []},
             {"/moderators", moderators_handler, []},
             {"/add_moderator/:user", add_moderator_handler, []},

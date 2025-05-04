@@ -16,6 +16,7 @@ setup() ->
     ets:new(admins, [set, public, named_table]),
     ets:new(moderators, [set, public, named_table]),
     ets:new(id_proofs, [set, public, named_table]),
+    ets:new(penalties, [set, public, named_table]),
     setup_admins(),
     setup_moderators(),
     setup_genesis().
