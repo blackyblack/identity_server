@@ -1,0 +1,15 @@
+# Ignore Gradle project-specific cache directory
+.gradle
+
+# Ignore Gradle build output directory
+build
+
+# User env should not be pushed due to possible sensitive information
+.env
+
+# IDE
+.idea
+.vscode
+
+# Rust build directory
+target
