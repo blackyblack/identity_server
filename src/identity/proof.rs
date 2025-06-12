@@ -12,7 +12,7 @@ pub fn idt_by_proof(
     balance: IdtAmount,
     proof_id: ProofId,
 ) -> Result<(), Error> {
-    if balance > MAX_IDT_BY_PROOF.into() {
+    if balance > MAX_IDT_BY_PROOF {
         return Err(Error::MaxBalanceExceeded);
     }
     state.prove(user, moderator, balance, proof_id, next_timestamp());

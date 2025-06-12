@@ -1,11 +1,12 @@
 use std::time::SystemTime;
 
+mod decay;
 pub mod error;
 pub mod idt;
 pub mod proof;
 pub mod punish;
+mod tree_walk;
 pub mod vouch;
-mod decay;
 
 pub fn next_timestamp() -> u64 {
     SystemTime::now()

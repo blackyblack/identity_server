@@ -1,4 +1,7 @@
-use crate::{identity::next_timestamp, state::{IdtAmount, State, UserAddress}};
+use crate::{
+    identity::next_timestamp,
+    state::{IdtAmount, State, UserAddress},
+};
 
 fn flat_one_idt_decay(event_timestamp: u64) -> IdtAmount {
     let now = next_timestamp();
@@ -26,12 +29,20 @@ pub fn penalty_decay(state: &State, user: &UserAddress) -> IdtAmount {
     flat_one_idt_decay(timestamp)
 }
 
+// vouchers decay twice,
+// first, from proof_decay, vouchee gets 0.1 of the voucher's proof_decay this way
+// second, from vouch_decay, vouchee gets 1 IDT per day decay from each voucher balance
 pub fn vouch_decay(state: &State, user: &UserAddress, voucher: &UserAddress) -> IdtAmount {
     let timestamp = match state.voucher_timestamp(user, voucher) {
         None => return 0,
         Some(e) => e,
     };
     flat_one_idt_decay(timestamp)
+}
+
+// subtract decay from balance, ensuring it does not go below zero
+pub fn balance_after_decay(balance: IdtAmount, decay: IdtAmount) -> IdtAmount {
+    balance.saturating_sub(decay)
 }
 
 #[cfg(test)]
@@ -47,11 +58,29 @@ mod tests {
         assert_eq!(proof_decay(&state, &USER_A.to_string()), 0);
         state.prove(USER_A.to_string(), MODERATOR.to_string(), 100, PROOF_ID, ts);
         assert_eq!(proof_decay(&state, &USER_A.to_string()), 0);
-        state.prove(USER_A.to_string(), MODERATOR.to_string(), 100, PROOF_ID, ts - 86400);
+        state.prove(
+            USER_A.to_string(),
+            MODERATOR.to_string(),
+            100,
+            PROOF_ID,
+            ts - 86400,
+        );
         assert_eq!(proof_decay(&state, &USER_A.to_string()), 1);
-        state.prove(USER_A.to_string(), MODERATOR.to_string(), 100, PROOF_ID, ts - 100000);
+        state.prove(
+            USER_A.to_string(),
+            MODERATOR.to_string(),
+            100,
+            PROOF_ID,
+            ts - 100000,
+        );
         assert_eq!(proof_decay(&state, &USER_A.to_string()), 1);
-        state.prove(USER_A.to_string(), MODERATOR.to_string(), 100, PROOF_ID, ts - 86400 * 2);
+        state.prove(
+            USER_A.to_string(),
+            MODERATOR.to_string(),
+            100,
+            PROOF_ID,
+            ts - 86400 * 2,
+        );
         assert_eq!(proof_decay(&state, &USER_A.to_string()), 2);
     }
 
@@ -62,11 +91,29 @@ mod tests {
         assert_eq!(penalty_decay(&state, &USER_A.to_string()), 0);
         state.punish(USER_A.to_string(), MODERATOR.to_string(), 100, PROOF_ID, ts);
         assert_eq!(penalty_decay(&state, &USER_A.to_string()), 0);
-        state.punish(USER_A.to_string(), MODERATOR.to_string(), 100, PROOF_ID, ts - 86400);
+        state.punish(
+            USER_A.to_string(),
+            MODERATOR.to_string(),
+            100,
+            PROOF_ID,
+            ts - 86400,
+        );
         assert_eq!(penalty_decay(&state, &USER_A.to_string()), 1);
-        state.punish(USER_A.to_string(), MODERATOR.to_string(), 100, PROOF_ID, ts - 100000);
+        state.punish(
+            USER_A.to_string(),
+            MODERATOR.to_string(),
+            100,
+            PROOF_ID,
+            ts - 100000,
+        );
         assert_eq!(penalty_decay(&state, &USER_A.to_string()), 1);
-        state.punish(USER_A.to_string(), MODERATOR.to_string(), 100, PROOF_ID, ts - 86400 * 2);
+        state.punish(
+            USER_A.to_string(),
+            MODERATOR.to_string(),
+            100,
+            PROOF_ID,
+            ts - 86400 * 2,
+        );
         assert_eq!(penalty_decay(&state, &USER_A.to_string()), 2);
     }
 
@@ -75,14 +122,29 @@ mod tests {
         let user_b = "userB";
         let mut state = State::default();
         let ts = next_timestamp();
-        assert_eq!(vouch_decay(&state, &USER_A.to_string(), &user_b.to_string()), 0);
+        assert_eq!(
+            vouch_decay(&state, &USER_A.to_string(), &user_b.to_string()),
+            0
+        );
         state.vouch(user_b.to_string(), USER_A.to_string(), ts);
-        assert_eq!(vouch_decay(&state, &USER_A.to_string(), &user_b.to_string()), 0);
+        assert_eq!(
+            vouch_decay(&state, &USER_A.to_string(), &user_b.to_string()),
+            0
+        );
         state.vouch(user_b.to_string(), USER_A.to_string(), ts - 86400);
-        assert_eq!(vouch_decay(&state, &USER_A.to_string(), &user_b.to_string()), 1);
+        assert_eq!(
+            vouch_decay(&state, &USER_A.to_string(), &user_b.to_string()),
+            1
+        );
         state.vouch(user_b.to_string(), USER_A.to_string(), ts - 100000);
-        assert_eq!(vouch_decay(&state, &USER_A.to_string(), &user_b.to_string()), 1);
+        assert_eq!(
+            vouch_decay(&state, &USER_A.to_string(), &user_b.to_string()),
+            1
+        );
         state.vouch(user_b.to_string(), USER_A.to_string(), ts - 86400 * 2);
-        assert_eq!(vouch_decay(&state, &USER_A.to_string(), &user_b.to_string()), 2);
+        assert_eq!(
+            vouch_decay(&state, &USER_A.to_string(), &user_b.to_string()),
+            2
+        );
     }
 }

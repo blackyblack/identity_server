@@ -1,17 +1,24 @@
 use std::collections::HashMap;
 
-use crate::{identity::punish::penalty_async, state::{IdtAmount, State, UserAddress}};
+use crate::{
+    identity::{
+        decay::{balance_after_decay, proof_decay, vouch_decay},
+        punish::penalty,
+        tree_walk::{ChildrenSelector, Visitor, walk_tree},
+    },
+    state::{IdtAmount, State, UserAddress},
+};
 
 pub const TOP_VOUCHERS_SIZE: u16 = 5;
 // voucher's balance is multipled to this coefficient before adding to vouchee balance
 pub const VOUCHER_WEIGHT: f64 = 0.1;
 
-#[derive(Clone)]
-struct VisitNode {
-    pub children_visited: bool,
-    // using im::HashSet for better memory usage in set clone operations
-    // im_rc cannot be used here because Tide state requires Send + Sync
-    pub visited_branch: im::HashSet<UserAddress>,
+struct VouchTree(State);
+
+impl ChildrenSelector for VouchTree {
+    async fn children(&self, root: &UserAddress) -> Vec<UserAddress> {
+        self.0.vouchers(root)
+    }
 }
 
 fn top_vouchers(
@@ -28,9 +35,9 @@ fn top_vouchers(
         // child balance could be missing due to cyclic dependency.
         let voucher_balance = match balances.get(v) {
             None => continue,
-            Some(x) => x,
+            Some(x) => *x,
         };
-        top_balances.push((v.clone(), *voucher_balance));
+        top_balances.push((v.clone(), voucher_balance));
     }
     top_balances.sort();
     top_balances.reverse();
@@ -38,78 +45,43 @@ fn top_vouchers(
     top_balances
 }
 
-pub async fn idt_balance(state: &State, user: &UserAddress) -> IdtAmount {
-    let mut stack = vec![];
-    // balances may have different values for the same user but during branch
-    // processing it should have the same balance for the same user
-    let mut balances: HashMap<UserAddress, IdtAmount> = HashMap::default();
-
-    stack.push((
-        user.clone(),
-        VisitNode {
-            children_visited: false,
-            visited_branch: im::HashSet::default(),
-        },
-    ));
-
-    loop {
-        let (last_user, visit_node) = match stack.pop() {
-            None => return balances.get(user).cloned().unwrap_or_default(),
-            Some(x) => x,
-        };
-        if !visit_node.children_visited {
-            let mut visited_branch = visit_node.visited_branch;
-            visited_branch.insert(last_user.clone());
-            stack.push((
-                last_user.clone(),
-                VisitNode {
-                    children_visited: true,
-                    // each node has own visited branch because we do not want
-                    // other branches to affect balance calculation of the current
-                    // branch
-                    visited_branch: visited_branch.clone(),
-                },
-            ));
-            for v in state.vouchers(&last_user) {
-                if visited_branch.contains(&v) {
-                    continue;
-                }
-                stack.push((
-                    v.clone(),
-                    VisitNode {
-                        children_visited: false,
-                        visited_branch: visited_branch.clone(),
-                    },
-                ));
-            }
-            continue;
-        }
-
-        let proven_balance = match state.proof_event(&last_user) {
-            None => 0,
-            Some(e) => e.idt_balance,
+impl Visitor for VouchTree {
+    async fn exit_node(
+        &self,
+        node: &UserAddress,
+        visited_branch: &im::HashSet<UserAddress>,
+        balances: &HashMap<UserAddress, IdtAmount>,
+    ) -> IdtAmount {
+        let proven_balance = {
+            let proven_balance = match self.0.proof_event(node) {
+                None => 0,
+                Some(e) => e.idt_balance,
+            };
+            let proven_balance_decay = proof_decay(&self.0, node);
+            balance_after_decay(proven_balance, proven_balance_decay)
         };
 
-        let top_vouchers = top_vouchers(state, &last_user, &visit_node.visited_branch, &balances);
-        let balance_from_vouchers = top_vouchers.into_iter().fold(0, |acc, (_user, b)| {
-            acc + (((b as f64) * VOUCHER_WEIGHT).floor() as u64)
+        let top_vouchers = top_vouchers(&self.0, node, visited_branch, balances);
+        let balance_from_vouchers = top_vouchers.into_iter().fold(0, |acc, (user, b)| {
+            let voucher_balance_decay = vouch_decay(&self.0, node, &user);
+            let voucher_balance = ((b as f64) * VOUCHER_WEIGHT).floor() as IdtAmount;
+            acc + balance_after_decay(voucher_balance, voucher_balance_decay)
         });
-        let penalty = penalty_async(state.clone(), last_user.clone()).await;
-        let user_balance = {
-            let positive_balance = proven_balance + (balance_from_vouchers as IdtAmount);
-            if positive_balance > penalty {
-                positive_balance - penalty
-            } else {
-                0
-            }
-        };
-        balances.insert(last_user, user_balance);
+        let penalty = penalty(&self.0, node).await;
+        let positive_balance = proven_balance + (balance_from_vouchers as IdtAmount);
+        positive_balance.saturating_sub(penalty)
     }
+}
+
+pub async fn idt_balance(state: &State, user: &UserAddress) -> IdtAmount {
+    let tree = VouchTree(state.clone());
+    walk_tree(&tree, user).await
 }
 
 #[cfg(test)]
 mod tests {
     use crate::identity::{
+        next_timestamp,
         proof::idt_by_proof,
         tests::{MODERATOR, PROOF_ID, USER_A},
         vouch::vouch,
@@ -318,15 +290,63 @@ mod tests {
     }
 
     #[async_std::test]
-    async fn test_async() {
+    async fn test_decay() {
+        let ts = next_timestamp();
+        let user_b = "userB";
         let mut state = State::default();
-        let _ = idt_by_proof(
-            &mut state,
+        state.prove(
             USER_A.to_string(),
             MODERATOR.to_string(),
-            100,
+            1000,
             PROOF_ID,
+            ts,
         );
+        assert_eq!(idt_balance(&state, &USER_A.to_string()).await, 1000);
+
+        state.prove(
+            USER_A.to_string(),
+            MODERATOR.to_string(),
+            1000,
+            PROOF_ID,
+            ts - 86400,
+        );
+        // decay after 1 day
+        assert_eq!(idt_balance(&state, &USER_A.to_string()).await, 999);
+
+        state.prove(
+            USER_A.to_string(),
+            MODERATOR.to_string(),
+            1,
+            PROOF_ID,
+            ts - 86400 * 10,
+        );
+        // cannot go lower than 0
+        assert_eq!(idt_balance(&state, &USER_A.to_string()).await, 0);
+
+        state.prove(
+            user_b.to_string(),
+            MODERATOR.to_string(),
+            1000,
+            PROOF_ID,
+            ts,
+        );
+
+        vouch(&mut state, user_b.to_string(), USER_A.to_string());
+
+        // only proven balance is affected so far
         assert_eq!(idt_balance(&state, &USER_A.to_string()).await, 100);
+
+        state.vouch(user_b.to_string(), USER_A.to_string(), ts - 86400);
+        // vouch balance also decays at 1 IDT per day rate
+        assert_eq!(idt_balance(&state, &USER_A.to_string()).await, 99);
+
+        state.prove(
+            user_b.to_string(),
+            MODERATOR.to_string(),
+            1000,
+            PROOF_ID,
+            ts - 86400,
+        );
+        assert_eq!(idt_balance(&state, &USER_A.to_string()).await, 98);
     }
 }
