@@ -1,4 +1,7 @@
-use std::{env, io::{Error, Write}};
+use std::{
+    env,
+    io::{Error, Write},
+};
 
 use identity_server::{routes, state::State};
 use tide::Server;
@@ -33,10 +36,10 @@ async fn start_server(state: State) -> Result<(), Error> {
         host_str => host_str.to_string(),
     };
     let mut server = tide::with_state(state);
-    setup_routes(&mut server);
+    setup_routes(&mut server).await;
     server.listen(format!("{host}:{port}")).await
 }
 
-fn setup_routes(server: &mut Server<State>) {
+async fn setup_routes(server: &mut Server<State>) {
     server.at("/idt/:user").get(routes::idt::route);
 }

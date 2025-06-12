@@ -2,6 +2,7 @@
 name = "identity_server"
 version = "0.0.1"
 description = "Identity and reputation graph service"
+license-file = "LICENSE"
 authors = []
 edition = "2024"
 
@@ -15,4 +16,4 @@ tide = "0.16"
 async-std = { version = "1.13", features = ["attributes"] }
 serde_json = "1"
 dotenv = "0.15"
-im-rc = "15.1.0"
+im = "15"

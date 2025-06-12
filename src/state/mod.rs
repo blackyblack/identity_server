@@ -1,7 +1,6 @@
 use std::{
     collections::HashMap,
     sync::{Arc, RwLock},
-    time::SystemTime,
 };
 
 pub type UserAddress = String;
@@ -28,17 +27,19 @@ pub struct ProofEvent {
     pub timestamp: u64,
 }
 
+// key - proven user
 #[derive(Default)]
-struct ProofsState {
-    // key - proven user
-    // value - ProofEvent
-    pub proofs: HashMap<UserAddress, ProofEvent>,
-}
+pub struct ProofState(HashMap<UserAddress, ProofEvent>);
+
+// key - punished user
+#[derive(Default)]
+pub struct PenaltyState(HashMap<UserAddress, ProofEvent>);
 
 #[derive(Default, Clone)]
 pub struct State {
     vouchers: Arc<RwLock<VouchersState>>,
-    proofs: Arc<RwLock<ProofsState>>,
+    proofs: Arc<RwLock<ProofState>>,
+    penalties: Arc<RwLock<PenaltyState>>,
 }
 
 impl VouchersState {
@@ -74,26 +75,41 @@ impl VouchersState {
     }
 }
 
-impl ProofsState {
+impl ProofState {
     pub fn prove(&mut self, user: UserAddress, event: ProofEvent) {
-        self.proofs.insert(user, event);
+        self.0.insert(user, event);
     }
 
     pub fn proof(&self, user: &UserAddress) -> Option<ProofEvent> {
-        self.proofs.get(user).cloned()
+        self.0.get(user).cloned()
+    }
+}
+
+impl PenaltyState {
+    pub fn punish(&mut self, user: UserAddress, event: ProofEvent) {
+        self.0.insert(user, event);
+    }
+
+    pub fn penalty(&self, user: &UserAddress) -> Option<ProofEvent> {
+        self.0.get(user).cloned()
     }
 }
 
 impl State {
-    pub fn vouch(&mut self, from: UserAddress, to: UserAddress) {
-        let ts = SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .expect("Should be after the UNIX_EPOCH timestamp")
-            .as_secs();
+    pub fn vouch(&mut self, from: UserAddress, to: UserAddress, timestamp: u64) {
         self.vouchers
             .write()
             .expect("Poisoned RwLock detected")
-            .vouch(from, to, ts);
+            .vouch(from, to, timestamp);
+    }
+
+    pub fn voucher_timestamp(&self, user: &UserAddress, voucher: &UserAddress) -> Option<u64> {
+        self.vouchers
+            .read()
+            .expect("Poisoned RwLock detected")
+            .vouchers(user)
+            .get(voucher)
+            .copied()
     }
 
     pub fn vouchers_with_time(&self, user: &UserAddress) -> Vec<VouchEvent> {
@@ -111,6 +127,15 @@ impl State {
             .iter()
             .map(|(k, _v)| k.clone())
             .collect()
+    }
+
+    pub fn vouchee_timestamp(&self, user: &UserAddress, vouchee: &UserAddress) -> Option<u64> {
+        self.vouchers
+            .read()
+            .expect("Poisoned RwLock detected")
+            .vouchees(user)
+            .get(vouchee)
+            .copied()
     }
 
     pub fn vouchees_with_time(&self, user: &UserAddress) -> Vec<VouchEvent> {
@@ -136,16 +161,13 @@ impl State {
         moderator: UserAddress,
         balance: IdtAmount,
         proof_id: ProofId,
+        timestamp: u64,
     ) {
-        let ts = SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .expect("Should be after the UNIX_EPOCH timestamp")
-            .as_secs();
         let proof_event = ProofEvent {
             moderator,
             idt_balance: balance,
             proof_id,
-            timestamp: ts,
+            timestamp,
         };
         self.proofs
             .write()
@@ -158,5 +180,32 @@ impl State {
             .read()
             .expect("Poisoned RwLock detected")
             .proof(user)
+    }
+
+    pub fn punish(
+        &mut self,
+        user: UserAddress,
+        moderator: UserAddress,
+        balance: IdtAmount,
+        proof_id: ProofId,
+        timestamp: u64,
+    ) {
+        let proof_event = ProofEvent {
+            moderator,
+            idt_balance: balance,
+            proof_id,
+            timestamp,
+        };
+        self.penalties
+            .write()
+            .expect("Poisoned RwLock detected")
+            .punish(user, proof_event);
+    }
+
+    pub fn penalty_event(&self, user: &UserAddress) -> Option<ProofEvent> {
+        self.penalties
+            .read()
+            .expect("Poisoned RwLock detected")
+            .penalty(user)
     }
 }

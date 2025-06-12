@@ -1,7 +1,7 @@
-use crate::state::{State, UserAddress};
+use crate::{identity::next_timestamp, state::{State, UserAddress}};
 
 pub fn vouch(state: &mut State, from: UserAddress, to: UserAddress) {
-    state.vouch(from, to);
+    state.vouch(from, to, next_timestamp());
 }
 
 #[cfg(test)]
