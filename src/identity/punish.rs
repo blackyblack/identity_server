@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::{
     identity::{
-        decay::{balance_after_decay, penalty_decay},
+        decay::{balance_after_decay, moderator_penalty_decay, system_penalty_decay},
         next_timestamp,
         proof::MAX_IDT_BY_PROOF,
         tree_walk::{ChildrenSelector, Visitor, walk_tree},
@@ -16,7 +16,8 @@ use crate::{
 // for a single user but we do not want to propagate it across the network indefinitely.
 pub const MAX_VOUCHEE_PENALTY: IdtAmount = MAX_IDT_BY_PROOF * 2;
 // vouchee's penalty is multipled to this coefficient before adding to voucher penalty
-pub const PENALTY_VOUCHEE_WEIGHT: f64 = 0.1;
+// stored as (nominator, denominator) to avoid floating point operations
+pub const PENALTY_VOUCHEE_WEIGHT_RATIO: (u64, u64) = (1, 10);
 
 struct PenaltyTree(State);
 
@@ -49,7 +50,9 @@ fn penalty_from_vouchees(
         };
         penalty += vouchee_penalty_limited;
     }
-    ((penalty as f64) * PENALTY_VOUCHEE_WEIGHT).floor() as IdtAmount
+    penalty
+        .saturating_mul(PENALTY_VOUCHEE_WEIGHT_RATIO.0.into())
+        .saturating_div(PENALTY_VOUCHEE_WEIGHT_RATIO.1.into())
 }
 
 impl Visitor for PenaltyTree {
@@ -60,16 +63,23 @@ impl Visitor for PenaltyTree {
         balances: &HashMap<UserAddress, IdtAmount>,
     ) -> IdtAmount {
         let proven_penalty = {
-            let proven_penalty = match self.0.penalty_event(node) {
+            let proven_penalty = match self.0.moderator_penalty(node) {
                 None => 0,
                 Some(e) => e.idt_balance,
             };
-            let proven_penalty_decay = penalty_decay(&self.0, node);
+            let proven_penalty_decay = moderator_penalty_decay(&self.0, node);
             balance_after_decay(proven_penalty, proven_penalty_decay)
         };
-
+        let system_penalty = {
+            let system_penalty = match self.0.system_penalty(node) {
+                None => 0,
+                Some(e) => e.idt_balance,
+            };
+            let system_penalty_decay = system_penalty_decay(&self.0, node);
+            balance_after_decay(system_penalty, system_penalty_decay)
+        };
         let vouchees_penalty = penalty_from_vouchees(&self.0, node, visited_branch, balances);
-        proven_penalty + vouchees_penalty
+        proven_penalty + system_penalty + vouchees_penalty
     }
 }
 
@@ -103,7 +113,7 @@ mod tests {
     #[test]
     fn test_basic() {
         let mut state = State::default();
-        assert!(state.penalty_event(&USER_A.to_string()).is_none());
+        assert!(state.moderator_penalty(&USER_A.to_string()).is_none());
         punish(
             &mut state,
             USER_A.to_string(),
@@ -111,23 +121,35 @@ mod tests {
             100,
             PROOF_ID,
         );
-        assert!(state.penalty_event(&USER_A.to_string()).is_some());
+        assert!(state.moderator_penalty(&USER_A.to_string()).is_some());
         assert_eq!(
             state
-                .penalty_event(&USER_A.to_string())
+                .moderator_penalty(&USER_A.to_string())
                 .unwrap()
                 .idt_balance,
             100
         );
         assert_eq!(
-            state.penalty_event(&USER_A.to_string()).unwrap().moderator,
+            state
+                .moderator_penalty(&USER_A.to_string())
+                .unwrap()
+                .moderator,
             MODERATOR
         );
         assert_eq!(
-            state.penalty_event(&USER_A.to_string()).unwrap().proof_id,
+            state
+                .moderator_penalty(&USER_A.to_string())
+                .unwrap()
+                .proof_id,
             PROOF_ID
         );
-        assert!(state.penalty_event(&USER_A.to_string()).unwrap().timestamp > 0);
+        assert!(
+            state
+                .moderator_penalty(&USER_A.to_string())
+                .unwrap()
+                .timestamp
+                > 0
+        );
     }
 
     #[async_std::test]

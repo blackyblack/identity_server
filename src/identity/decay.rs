@@ -14,15 +14,23 @@ fn flat_one_idt_decay(event_timestamp: u64) -> IdtAmount {
 }
 
 pub fn proof_decay(state: &State, user: &UserAddress) -> IdtAmount {
-    let (timestamp, _balance) = match state.proof_event(user) {
+    let (timestamp, _balance) = match state.proof(user) {
         None => return 0,
         Some(e) => (e.timestamp, e.idt_balance),
     };
     flat_one_idt_decay(timestamp)
 }
 
-pub fn penalty_decay(state: &State, user: &UserAddress) -> IdtAmount {
-    let (timestamp, _penalty) = match state.penalty_event(user) {
+pub fn moderator_penalty_decay(state: &State, user: &UserAddress) -> IdtAmount {
+    let (timestamp, _penalty) = match state.moderator_penalty(user) {
+        None => return 0,
+        Some(e) => (e.timestamp, e.idt_balance),
+    };
+    flat_one_idt_decay(timestamp)
+}
+
+pub fn system_penalty_decay(state: &State, user: &UserAddress) -> IdtAmount {
+    let (timestamp, _penalty) = match state.system_penalty(user) {
         None => return 0,
         Some(e) => (e.timestamp, e.idt_balance),
     };
@@ -88,9 +96,9 @@ mod tests {
     fn test_basic_penalty_decay() {
         let mut state = State::default();
         let ts = next_timestamp();
-        assert_eq!(penalty_decay(&state, &USER_A.to_string()), 0);
+        assert_eq!(moderator_penalty_decay(&state, &USER_A.to_string()), 0);
         state.punish(USER_A.to_string(), MODERATOR.to_string(), 100, PROOF_ID, ts);
-        assert_eq!(penalty_decay(&state, &USER_A.to_string()), 0);
+        assert_eq!(moderator_penalty_decay(&state, &USER_A.to_string()), 0);
         state.punish(
             USER_A.to_string(),
             MODERATOR.to_string(),
@@ -98,7 +106,7 @@ mod tests {
             PROOF_ID,
             ts - 86400,
         );
-        assert_eq!(penalty_decay(&state, &USER_A.to_string()), 1);
+        assert_eq!(moderator_penalty_decay(&state, &USER_A.to_string()), 1);
         state.punish(
             USER_A.to_string(),
             MODERATOR.to_string(),
@@ -106,7 +114,7 @@ mod tests {
             PROOF_ID,
             ts - 100000,
         );
-        assert_eq!(penalty_decay(&state, &USER_A.to_string()), 1);
+        assert_eq!(moderator_penalty_decay(&state, &USER_A.to_string()), 1);
         state.punish(
             USER_A.to_string(),
             MODERATOR.to_string(),
@@ -114,7 +122,7 @@ mod tests {
             PROOF_ID,
             ts - 86400 * 2,
         );
-        assert_eq!(penalty_decay(&state, &USER_A.to_string()), 2);
+        assert_eq!(moderator_penalty_decay(&state, &USER_A.to_string()), 2);
     }
 
     #[test]
@@ -146,5 +154,20 @@ mod tests {
             vouch_decay(&state, &USER_A.to_string(), &user_b.to_string()),
             2
         );
+    }
+
+    #[test]
+    fn test_system_penalty_decay() {
+        let mut state = State::default();
+        let ts = next_timestamp();
+        assert_eq!(system_penalty_decay(&state, &USER_A.to_string()), 0);
+        state.system_punish(USER_A.to_string(), 100, ts);
+        assert_eq!(system_penalty_decay(&state, &USER_A.to_string()), 0);
+        state.system_punish(USER_A.to_string(), 100, ts - 86400);
+        assert_eq!(system_penalty_decay(&state, &USER_A.to_string()), 1);
+        state.system_punish(USER_A.to_string(), 100, ts - 100000);
+        assert_eq!(system_penalty_decay(&state, &USER_A.to_string()), 1);
+        state.system_punish(USER_A.to_string(), 100, ts - 86400 * 2);
+        assert_eq!(system_penalty_decay(&state, &USER_A.to_string()), 2);
     }
 }

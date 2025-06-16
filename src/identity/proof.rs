@@ -28,7 +28,7 @@ mod tests {
     #[test]
     fn test_basic() {
         let mut state = State::default();
-        assert!(state.proof_event(&USER_A.to_string()).is_none());
+        assert!(state.proof(&USER_A.to_string()).is_none());
         assert!(
             idt_by_proof(
                 &mut state,
@@ -39,19 +39,13 @@ mod tests {
             )
             .is_ok()
         );
+        assert_eq!(state.proof(&USER_A.to_string()).unwrap().idt_balance, 100);
         assert_eq!(
-            state.proof_event(&USER_A.to_string()).unwrap().idt_balance,
-            100
-        );
-        assert_eq!(
-            state.proof_event(&USER_A.to_string()).unwrap().moderator,
+            state.proof(&USER_A.to_string()).unwrap().moderator,
             MODERATOR
         );
-        assert_eq!(
-            state.proof_event(&USER_A.to_string()).unwrap().proof_id,
-            PROOF_ID
-        );
-        assert!(state.proof_event(&USER_A.to_string()).unwrap().timestamp > 0);
+        assert_eq!(state.proof(&USER_A.to_string()).unwrap().proof_id, PROOF_ID);
+        assert!(state.proof(&USER_A.to_string()).unwrap().timestamp > 0);
 
         assert!(
             idt_by_proof(
@@ -63,24 +57,21 @@ mod tests {
             )
             .is_ok()
         );
+        assert_eq!(state.proof(&USER_A.to_string()).unwrap().idt_balance, 200);
         assert_eq!(
-            state.proof_event(&USER_A.to_string()).unwrap().idt_balance,
-            200
-        );
-        assert_eq!(
-            state.proof_event(&USER_A.to_string()).unwrap().moderator,
+            state.proof(&USER_A.to_string()).unwrap().moderator,
             MODERATOR
         );
-        assert_eq!(state.proof_event(&USER_A.to_string()).unwrap().proof_id, 2);
+        assert_eq!(state.proof(&USER_A.to_string()).unwrap().proof_id, 2);
         // we do not compare with previous timestamp because it is measured in seconds and
         // test runs way much faster
-        assert!(state.proof_event(&USER_A.to_string()).unwrap().timestamp > 0);
+        assert!(state.proof(&USER_A.to_string()).unwrap().timestamp > 0);
     }
 
     #[test]
     fn test_max_balance() {
         let mut state = State::default();
-        assert!(state.proof_event(&USER_A.to_string()).is_none());
+        assert!(state.proof(&USER_A.to_string()).is_none());
         assert!(
             idt_by_proof(
                 &mut state,
@@ -91,10 +82,7 @@ mod tests {
             )
             .is_ok()
         );
-        assert_eq!(
-            state.proof_event(&USER_A.to_string()).unwrap().idt_balance,
-            40000
-        );
+        assert_eq!(state.proof(&USER_A.to_string()).unwrap().idt_balance, 40000);
         assert!(
             idt_by_proof(
                 &mut state,
@@ -105,10 +93,7 @@ mod tests {
             )
             .is_err()
         );
-        assert_eq!(
-            state.proof_event(&USER_A.to_string()).unwrap().idt_balance,
-            40000
-        );
+        assert_eq!(state.proof(&USER_A.to_string()).unwrap().idt_balance, 40000);
         assert!(
             idt_by_proof(
                 &mut state,
@@ -119,9 +104,6 @@ mod tests {
             )
             .is_err()
         );
-        assert_eq!(
-            state.proof_event(&USER_A.to_string()).unwrap().idt_balance,
-            40000
-        );
+        assert_eq!(state.proof(&USER_A.to_string()).unwrap().idt_balance, 40000);
     }
 }

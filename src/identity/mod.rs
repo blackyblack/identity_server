@@ -2,6 +2,7 @@ use std::time::SystemTime;
 
 mod decay;
 pub mod error;
+pub mod forget;
 pub mod idt;
 pub mod proof;
 pub mod punish;

@@ -20,7 +20,7 @@ struct VouchersState {
 }
 
 #[derive(Clone)]
-pub struct ProofEvent {
+pub struct ModeratorProof {
     pub moderator: UserAddress,
     pub idt_balance: IdtAmount,
     pub proof_id: ProofId,
@@ -28,12 +28,27 @@ pub struct ProofEvent {
 }
 
 // key - proven user
+// only single proof for a user is allowed. If proof should be updated,
+// moderator should prove again and update proof manually.
 #[derive(Default)]
-pub struct ProofState(HashMap<UserAddress, ProofEvent>);
+pub struct ProofState(HashMap<UserAddress, ModeratorProof>);
+
+// system can generate own penalties, so proof_id and moderator are not required
+#[derive(Clone)]
+pub struct SystemPenalty {
+    pub idt_balance: IdtAmount,
+    pub timestamp: u64,
+}
 
 // key - punished user
 #[derive(Default)]
-pub struct PenaltyState(HashMap<UserAddress, ProofEvent>);
+pub struct PenaltyState {
+    // only single ban for a user is allowed. If penalty should be increased,
+    // moderator should ban again and increase penalty manually.
+    pub moderator_penalty: HashMap<UserAddress, ModeratorProof>,
+    // do not store all penalties but recalculate penalty on each request
+    pub system_penalty: HashMap<UserAddress, SystemPenalty>,
+}
 
 #[derive(Default, Clone)]
 pub struct State {
@@ -66,6 +81,15 @@ impl VouchersState {
             });
     }
 
+    pub fn forget(&mut self, from: UserAddress, to: &UserAddress) {
+        self.vouchers.entry(to.clone()).and_modify(|v| {
+            v.remove(&from);
+        });
+        self.vouchees.entry(from).and_modify(|v| {
+            v.remove(to);
+        });
+    }
+
     pub fn vouchers(&self, user: &UserAddress) -> HashMap<UserAddress, u64> {
         self.vouchers.get(user).cloned().unwrap_or_default()
     }
@@ -76,22 +100,30 @@ impl VouchersState {
 }
 
 impl ProofState {
-    pub fn prove(&mut self, user: UserAddress, event: ProofEvent) {
+    pub fn prove(&mut self, user: UserAddress, event: ModeratorProof) {
         self.0.insert(user, event);
     }
 
-    pub fn proof(&self, user: &UserAddress) -> Option<ProofEvent> {
+    pub fn proof(&self, user: &UserAddress) -> Option<ModeratorProof> {
         self.0.get(user).cloned()
     }
 }
 
 impl PenaltyState {
-    pub fn punish(&mut self, user: UserAddress, event: ProofEvent) {
-        self.0.insert(user, event);
+    pub fn punish(&mut self, user: UserAddress, event: ModeratorProof) {
+        self.moderator_penalty.insert(user, event);
     }
 
-    pub fn penalty(&self, user: &UserAddress) -> Option<ProofEvent> {
-        self.0.get(user).cloned()
+    pub fn system_punish(&mut self, user: UserAddress, event: SystemPenalty) {
+        self.system_penalty.insert(user, event);
+    }
+
+    pub fn moderator_penalty(&self, user: &UserAddress) -> Option<ModeratorProof> {
+        self.moderator_penalty.get(user).cloned()
+    }
+
+    pub fn system_penalty(&self, user: &UserAddress) -> Option<SystemPenalty> {
+        self.system_penalty.get(user).cloned()
     }
 }
 
@@ -101,6 +133,13 @@ impl State {
             .write()
             .expect("Poisoned RwLock detected")
             .vouch(from, to, timestamp);
+    }
+
+    pub fn forget(&mut self, from: UserAddress, to: &UserAddress) {
+        self.vouchers
+            .write()
+            .expect("Poisoned RwLock detected")
+            .forget(from, to);
     }
 
     pub fn voucher_timestamp(&self, user: &UserAddress, voucher: &UserAddress) -> Option<u64> {
@@ -163,7 +202,7 @@ impl State {
         proof_id: ProofId,
         timestamp: u64,
     ) {
-        let proof_event = ProofEvent {
+        let proof_event = ModeratorProof {
             moderator,
             idt_balance: balance,
             proof_id,
@@ -175,7 +214,7 @@ impl State {
             .prove(user, proof_event);
     }
 
-    pub fn proof_event(&self, user: &UserAddress) -> Option<ProofEvent> {
+    pub fn proof(&self, user: &UserAddress) -> Option<ModeratorProof> {
         self.proofs
             .read()
             .expect("Poisoned RwLock detected")
@@ -190,7 +229,7 @@ impl State {
         proof_id: ProofId,
         timestamp: u64,
     ) {
-        let proof_event = ProofEvent {
+        let event = ModeratorProof {
             moderator,
             idt_balance: balance,
             proof_id,
@@ -199,13 +238,31 @@ impl State {
         self.penalties
             .write()
             .expect("Poisoned RwLock detected")
-            .punish(user, proof_event);
+            .punish(user, event);
     }
 
-    pub fn penalty_event(&self, user: &UserAddress) -> Option<ProofEvent> {
+    pub fn moderator_penalty(&self, user: &UserAddress) -> Option<ModeratorProof> {
         self.penalties
             .read()
             .expect("Poisoned RwLock detected")
-            .penalty(user)
+            .moderator_penalty(user)
+    }
+
+    pub fn system_punish(&mut self, user: UserAddress, balance: IdtAmount, timestamp: u64) {
+        let event = SystemPenalty {
+            idt_balance: balance,
+            timestamp,
+        };
+        self.penalties
+            .write()
+            .expect("Poisoned RwLock detected")
+            .system_punish(user, event);
+    }
+
+    pub fn system_penalty(&self, user: &UserAddress) -> Option<SystemPenalty> {
+        self.penalties
+            .read()
+            .expect("Poisoned RwLock detected")
+            .system_penalty(user)
     }
 }

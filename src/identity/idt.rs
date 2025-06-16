@@ -10,8 +10,9 @@ use crate::{
 };
 
 pub const TOP_VOUCHERS_SIZE: u16 = 5;
-// voucher's balance is multipled to this coefficient before adding to vouchee balance
-pub const VOUCHER_WEIGHT: f64 = 0.1;
+// voucher's balance is multipled to this coefficient before adding to vouchee balance,
+// stored as (nominator, denominator) to avoid floating point operations
+pub const VOUCHER_WEIGHT_RATIO: (u64, u64) = (1, 10);
 
 struct VouchTree(State);
 
@@ -53,7 +54,7 @@ impl Visitor for VouchTree {
         balances: &HashMap<UserAddress, IdtAmount>,
     ) -> IdtAmount {
         let proven_balance = {
-            let proven_balance = match self.0.proof_event(node) {
+            let proven_balance = match self.0.proof(node) {
                 None => 0,
                 Some(e) => e.idt_balance,
             };
@@ -64,11 +65,13 @@ impl Visitor for VouchTree {
         let top_vouchers = top_vouchers(&self.0, node, visited_branch, balances);
         let balance_from_vouchers = top_vouchers.into_iter().fold(0, |acc, (user, b)| {
             let voucher_balance_decay = vouch_decay(&self.0, node, &user);
-            let voucher_balance = ((b as f64) * VOUCHER_WEIGHT).floor() as IdtAmount;
+            let voucher_balance = b
+                .saturating_mul(VOUCHER_WEIGHT_RATIO.0.into())
+                .saturating_div(VOUCHER_WEIGHT_RATIO.1.into());
             acc + balance_after_decay(voucher_balance, voucher_balance_decay)
         });
         let penalty = penalty(&self.0, node).await;
-        let positive_balance = proven_balance + (balance_from_vouchers as IdtAmount);
+        let positive_balance = proven_balance + balance_from_vouchers;
         positive_balance.saturating_sub(penalty)
     }
 }
