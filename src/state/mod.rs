@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     sync::{Arc, RwLock},
 };
 
@@ -13,10 +13,10 @@ pub type IdtAmount = u128;
 struct VouchersState {
     // key - vouchee, vouch object
     // value - (voucher, unix timestamp) map
-    pub vouchers: HashMap<UserAddress, HashMap<UserAddress, u64>>,
+    vouchers: HashMap<UserAddress, HashMap<UserAddress, u64>>,
     // key - voucher, vouch subject
     // value - (vouchee, unix timestamp) map
-    pub vouchees: HashMap<UserAddress, HashMap<UserAddress, u64>>,
+    vouchees: HashMap<UserAddress, HashMap<UserAddress, u64>>,
 }
 
 #[derive(Clone)]
@@ -31,10 +31,10 @@ pub struct ModeratorProof {
 // only single proof for a user is allowed. If proof should be updated,
 // moderator should prove again and update proof manually.
 #[derive(Default)]
-pub struct ProofState(HashMap<UserAddress, ModeratorProof>);
+struct ProofState(HashMap<UserAddress, ModeratorProof>);
 
 // system can generate own penalties, so proof_id and moderator are not required
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct SystemPenalty {
     pub idt_balance: IdtAmount,
     pub timestamp: u64,
@@ -42,12 +42,12 @@ pub struct SystemPenalty {
 
 // key - punished user
 #[derive(Default)]
-pub struct PenaltyState {
+struct PenaltyState {
     // only single ban for a user is allowed. If penalty should be increased,
     // moderator should ban again and increase penalty manually.
     pub moderator_penalty: HashMap<UserAddress, ModeratorProof>,
-    // do not store all penalties but recalculate penalty on each request
-    pub system_penalty: HashMap<UserAddress, SystemPenalty>,
+    // inside map key - forgotten user
+    pub forget_penalties: HashMap<UserAddress, HashMap<UserAddress, SystemPenalty>>,
 }
 
 #[derive(Default, Clone)]
@@ -114,16 +114,44 @@ impl PenaltyState {
         self.moderator_penalty.insert(user, event);
     }
 
-    pub fn system_punish(&mut self, user: UserAddress, event: SystemPenalty) {
-        self.system_penalty.insert(user, event);
+    pub fn forget(&mut self, user: UserAddress, forgotten: UserAddress, event: SystemPenalty) {
+        self.forget_penalties
+            .entry(user)
+            .and_modify(|v| {
+                v.insert(forgotten.clone(), event.clone());
+            })
+            .or_insert_with(move || HashMap::from([(forgotten, event)]));
     }
 
     pub fn moderator_penalty(&self, user: &UserAddress) -> Option<ModeratorProof> {
         self.moderator_penalty.get(user).cloned()
     }
 
-    pub fn system_penalty(&self, user: &UserAddress) -> Option<SystemPenalty> {
-        self.system_penalty.get(user).cloned()
+    pub fn forgotten_penalty(
+        &self,
+        user: &UserAddress,
+        forgotten: &UserAddress,
+    ) -> Option<SystemPenalty> {
+        self.forget_penalties
+            .get(user)
+            .and_then(|v| v.get(forgotten).cloned())
+    }
+
+    pub fn forgotten_users(&self, user: &UserAddress) -> HashSet<UserAddress> {
+        self.forget_penalties
+            .get(user)
+            .cloned()
+            .unwrap_or_default()
+            .into_keys()
+            .collect()
+    }
+
+    // removes first penalty of the user, if available
+    // allows to clean up outdated penalties
+    pub fn delete_forgotten(&mut self, user: UserAddress, forgotten: &UserAddress) {
+        self.forget_penalties.entry(user).and_modify(|v| {
+            v.remove(forgotten);
+        });
     }
 }
 
@@ -135,11 +163,28 @@ impl State {
             .vouch(from, to, timestamp);
     }
 
-    pub fn forget(&mut self, from: UserAddress, to: &UserAddress) {
+    pub fn forget(
+        &mut self,
+        from: UserAddress,
+        to: UserAddress,
+        penalty: IdtAmount,
+        timestamp: u64,
+    ) {
         self.vouchers
             .write()
             .expect("Poisoned RwLock detected")
-            .forget(from, to);
+            .forget(from.clone(), &to);
+        self.penalties
+            .write()
+            .expect("Poisoned RwLock detected")
+            .forget(
+                from,
+                to,
+                SystemPenalty {
+                    idt_balance: penalty,
+                    timestamp,
+                },
+            );
     }
 
     pub fn voucher_timestamp(&self, user: &UserAddress, voucher: &UserAddress) -> Option<u64> {
@@ -248,21 +293,28 @@ impl State {
             .moderator_penalty(user)
     }
 
-    pub fn system_punish(&mut self, user: UserAddress, balance: IdtAmount, timestamp: u64) {
-        let event = SystemPenalty {
-            idt_balance: balance,
-            timestamp,
-        };
-        self.penalties
-            .write()
-            .expect("Poisoned RwLock detected")
-            .system_punish(user, event);
-    }
-
-    pub fn system_penalty(&self, user: &UserAddress) -> Option<SystemPenalty> {
+    pub fn forgotten_penalty(
+        &self,
+        user: &UserAddress,
+        forgotten: &UserAddress,
+    ) -> Option<SystemPenalty> {
         self.penalties
             .read()
             .expect("Poisoned RwLock detected")
-            .system_penalty(user)
+            .forgotten_penalty(user, forgotten)
+    }
+
+    pub fn forgotten_users(&self, user: &UserAddress) -> HashSet<UserAddress> {
+        self.penalties
+            .read()
+            .expect("Poisoned RwLock detected")
+            .forgotten_users(user)
+    }
+
+    pub fn delete_forgotten(&mut self, user: UserAddress, forgotten: &UserAddress) {
+        self.penalties
+            .write()
+            .expect("Poisoned RwLock detected")
+            .delete_forgotten(user, forgotten);
     }
 }

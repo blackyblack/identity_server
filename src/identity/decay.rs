@@ -1,6 +1,6 @@
 use crate::{
     identity::next_timestamp,
-    state::{IdtAmount, State, UserAddress},
+    state::{IdtAmount, State, SystemPenalty, UserAddress},
 };
 
 fn flat_one_idt_decay(event_timestamp: u64) -> IdtAmount {
@@ -29,12 +29,8 @@ pub fn moderator_penalty_decay(state: &State, user: &UserAddress) -> IdtAmount {
     flat_one_idt_decay(timestamp)
 }
 
-pub fn system_penalty_decay(state: &State, user: &UserAddress) -> IdtAmount {
-    let (timestamp, _penalty) = match state.system_penalty(user) {
-        None => return 0,
-        Some(e) => (e.timestamp, e.idt_balance),
-    };
-    flat_one_idt_decay(timestamp)
+pub fn system_penalty_decay(event: &SystemPenalty) -> IdtAmount {
+    flat_one_idt_decay(event.timestamp)
 }
 
 // vouchers decay twice,
@@ -158,16 +154,27 @@ mod tests {
 
     #[test]
     fn test_system_penalty_decay() {
-        let mut state = State::default();
         let ts = next_timestamp();
-        assert_eq!(system_penalty_decay(&state, &USER_A.to_string()), 0);
-        state.system_punish(USER_A.to_string(), 100, ts);
-        assert_eq!(system_penalty_decay(&state, &USER_A.to_string()), 0);
-        state.system_punish(USER_A.to_string(), 100, ts - 86400);
-        assert_eq!(system_penalty_decay(&state, &USER_A.to_string()), 1);
-        state.system_punish(USER_A.to_string(), 100, ts - 100000);
-        assert_eq!(system_penalty_decay(&state, &USER_A.to_string()), 1);
-        state.system_punish(USER_A.to_string(), 100, ts - 86400 * 2);
-        assert_eq!(system_penalty_decay(&state, &USER_A.to_string()), 2);
+        assert_eq!(
+            system_penalty_decay(&SystemPenalty {
+                idt_balance: 10,
+                timestamp: ts
+            }),
+            0
+        );
+        assert_eq!(
+            system_penalty_decay(&SystemPenalty {
+                idt_balance: 10,
+                timestamp: ts - 86400
+            }),
+            1
+        );
+        assert_eq!(
+            system_penalty_decay(&SystemPenalty {
+                idt_balance: 10,
+                timestamp: ts - 86400 * 2
+            }),
+            2
+        );
     }
 }

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::{
     identity::{
@@ -55,6 +55,22 @@ fn penalty_from_vouchees(
         .saturating_div(PENALTY_VOUCHEE_WEIGHT_RATIO.1.into())
 }
 
+fn forgotten_penalties_sum(
+    state: &State,
+    user: &UserAddress,
+    vouchees: &HashSet<UserAddress>,
+) -> IdtAmount {
+    vouchees.iter().fold(0, |acc, p| {
+        let vouchee_penalty_maybe = state.forgotten_penalty(user, p);
+        let vouchee_penalty = match vouchee_penalty_maybe {
+            None => return acc,
+            Some(p) => p,
+        };
+        let decay = system_penalty_decay(&vouchee_penalty);
+        acc + balance_after_decay(vouchee_penalty.idt_balance, decay)
+    })
+}
+
 impl Visitor for PenaltyTree {
     async fn exit_node(
         &self,
@@ -70,14 +86,8 @@ impl Visitor for PenaltyTree {
             let proven_penalty_decay = moderator_penalty_decay(&self.0, node);
             balance_after_decay(proven_penalty, proven_penalty_decay)
         };
-        let system_penalty = {
-            let system_penalty = match self.0.system_penalty(node) {
-                None => 0,
-                Some(e) => e.idt_balance,
-            };
-            let system_penalty_decay = system_penalty_decay(&self.0, node);
-            balance_after_decay(system_penalty, system_penalty_decay)
-        };
+        let vouchees = self.0.forgotten_users(node);
+        let system_penalty = forgotten_penalties_sum(&self.0, node, &vouchees);
         let vouchees_penalty = penalty_from_vouchees(&self.0, node, visited_branch, balances);
         proven_penalty + system_penalty + vouchees_penalty
     }
