@@ -1,22 +1,51 @@
-use crate::{
-    identity::{error::Error, next_timestamp},
-    state::{IdtAmount, ProofId, State, UserAddress},
+use crate::identity::{
+    IdentityService, IdtAmount, ModeratorProof, ProofId, UserAddress, error::Error, next_timestamp,
 };
 
 pub const MAX_IDT_BY_PROOF: IdtAmount = 50000;
 
-pub fn idt_by_proof(
-    state: &mut State,
+impl IdentityService {
+    pub fn prove_with_timestamp(
+        &self,
+        user: UserAddress,
+        moderator: UserAddress,
+        balance: IdtAmount,
+        proof_id: ProofId,
+        timestamp: u64,
+    ) -> Result<(), Error> {
+        if balance > MAX_IDT_BY_PROOF {
+            return Err(Error::MaxBalanceExceeded);
+        }
+        let event = ModeratorProof {
+            moderator,
+            idt_balance: balance,
+            proof_id,
+            timestamp,
+        };
+        self.proofs
+            .write()
+            .expect("Poisoned RwLock detected")
+            .insert(user, event);
+        Ok(())
+    }
+
+    pub fn proof(&self, user: &UserAddress) -> Option<ModeratorProof> {
+        self.proofs
+            .read()
+            .expect("Poisoned RwLock detected")
+            .get(user)
+            .cloned()
+    }
+}
+
+pub fn prove(
+    service: &IdentityService,
     user: UserAddress,
     moderator: UserAddress,
     balance: IdtAmount,
     proof_id: ProofId,
 ) -> Result<(), Error> {
-    if balance > MAX_IDT_BY_PROOF {
-        return Err(Error::MaxBalanceExceeded);
-    }
-    state.prove(user, moderator, balance, proof_id, next_timestamp());
-    Ok(())
+    service.prove_with_timestamp(user, moderator, balance, proof_id, next_timestamp())
 }
 
 #[cfg(test)]
@@ -27,11 +56,11 @@ mod tests {
 
     #[test]
     fn test_basic() {
-        let mut state = State::default();
-        assert!(state.proof(&USER_A.to_string()).is_none());
+        let service = IdentityService::default();
+        assert!(service.proof(&USER_A.to_string()).is_none());
         assert!(
-            idt_by_proof(
-                &mut state,
+            prove(
+                &service,
                 USER_A.to_string(),
                 MODERATOR.to_string(),
                 100,
@@ -39,42 +68,36 @@ mod tests {
             )
             .is_ok()
         );
-        assert_eq!(state.proof(&USER_A.to_string()).unwrap().idt_balance, 100);
+        assert_eq!(service.proof(&USER_A.to_string()).unwrap().idt_balance, 100);
         assert_eq!(
-            state.proof(&USER_A.to_string()).unwrap().moderator,
+            service.proof(&USER_A.to_string()).unwrap().moderator,
             MODERATOR
         );
-        assert_eq!(state.proof(&USER_A.to_string()).unwrap().proof_id, PROOF_ID);
-        assert!(state.proof(&USER_A.to_string()).unwrap().timestamp > 0);
+        assert_eq!(
+            service.proof(&USER_A.to_string()).unwrap().proof_id,
+            PROOF_ID
+        );
+        assert!(service.proof(&USER_A.to_string()).unwrap().timestamp > 0);
 
-        assert!(
-            idt_by_proof(
-                &mut state,
-                USER_A.to_string(),
-                MODERATOR.to_string(),
-                200,
-                2
-            )
-            .is_ok()
-        );
-        assert_eq!(state.proof(&USER_A.to_string()).unwrap().idt_balance, 200);
+        assert!(prove(&service, USER_A.to_string(), MODERATOR.to_string(), 200, 2).is_ok());
+        assert_eq!(service.proof(&USER_A.to_string()).unwrap().idt_balance, 200);
         assert_eq!(
-            state.proof(&USER_A.to_string()).unwrap().moderator,
+            service.proof(&USER_A.to_string()).unwrap().moderator,
             MODERATOR
         );
-        assert_eq!(state.proof(&USER_A.to_string()).unwrap().proof_id, 2);
+        assert_eq!(service.proof(&USER_A.to_string()).unwrap().proof_id, 2);
         // we do not compare with previous timestamp because it is measured in seconds and
         // test runs way much faster
-        assert!(state.proof(&USER_A.to_string()).unwrap().timestamp > 0);
+        assert!(service.proof(&USER_A.to_string()).unwrap().timestamp > 0);
     }
 
     #[test]
     fn test_max_balance() {
-        let mut state = State::default();
-        assert!(state.proof(&USER_A.to_string()).is_none());
+        let service = IdentityService::default();
+        assert!(service.proof(&USER_A.to_string()).is_none());
         assert!(
-            idt_by_proof(
-                &mut state,
+            prove(
+                &service,
                 USER_A.to_string(),
                 MODERATOR.to_string(),
                 40000,
@@ -82,10 +105,13 @@ mod tests {
             )
             .is_ok()
         );
-        assert_eq!(state.proof(&USER_A.to_string()).unwrap().idt_balance, 40000);
+        assert_eq!(
+            service.proof(&USER_A.to_string()).unwrap().idt_balance,
+            40000
+        );
         assert!(
-            idt_by_proof(
-                &mut state,
+            prove(
+                &service,
                 USER_A.to_string(),
                 MODERATOR.to_string(),
                 50001,
@@ -93,10 +119,13 @@ mod tests {
             )
             .is_err()
         );
-        assert_eq!(state.proof(&USER_A.to_string()).unwrap().idt_balance, 40000);
+        assert_eq!(
+            service.proof(&USER_A.to_string()).unwrap().idt_balance,
+            40000
+        );
         assert!(
-            idt_by_proof(
-                &mut state,
+            prove(
+                &service,
                 USER_A.to_string(),
                 MODERATOR.to_string(),
                 60000,
@@ -104,6 +133,9 @@ mod tests {
             )
             .is_err()
         );
-        assert_eq!(state.proof(&USER_A.to_string()).unwrap().idt_balance, 40000);
+        assert_eq!(
+            service.proof(&USER_A.to_string()).unwrap().idt_balance,
+            40000
+        );
     }
 }

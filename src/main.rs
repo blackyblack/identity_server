@@ -3,7 +3,7 @@ use std::{
     io::{Error, Write},
 };
 
-use identity_server::{routes, state::State};
+use identity_server::{identity::IdentityService, routes};
 use tide::Server;
 
 pub const DEFAULT_PORT: u32 = 8080;
@@ -21,12 +21,12 @@ async fn main() -> Result<(), Error> {
             writeln!(buf, "[{}] {}: {}", record.level(), ts, record.args())
         })
         .init();
-    let state = State::default();
+    let identity_service = IdentityService::default();
     log::info!("Starting identity server");
-    start_server(state).await
+    start_server(identity_service).await
 }
 
-async fn start_server(state: State) -> Result<(), Error> {
+async fn start_server(identity_service: IdentityService) -> Result<(), Error> {
     let port = match env::var("PORT").unwrap_or_default().as_str() {
         "" => DEFAULT_PORT,
         port_str => port_str.parse::<u32>().unwrap_or(DEFAULT_PORT),
@@ -35,11 +35,11 @@ async fn start_server(state: State) -> Result<(), Error> {
         "" => DEFAULT_HOST.to_string(),
         host_str => host_str.to_string(),
     };
-    let mut server = tide::with_state(state);
+    let mut server = tide::with_state(identity_service);
     setup_routes(&mut server).await;
     server.listen(format!("{host}:{port}")).await
 }
 
-async fn setup_routes(server: &mut Server<State>) {
+async fn setup_routes(server: &mut Server<IdentityService>) {
     server.at("/idt/:user").get(routes::idt::route);
 }

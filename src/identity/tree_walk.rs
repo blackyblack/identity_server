@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::state::{IdtAmount, UserAddress};
+use crate::identity::{IdtAmount, UserAddress};
 
 pub trait Visitor {
     // called when all children of the node are processed

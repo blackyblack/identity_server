@@ -1,31 +1,91 @@
-use crate::{
-    identity::{
-        next_timestamp,
-        punish::{PENALTY_VOUCHEE_WEIGHT_RATIO, penalty},
-    },
-    state::{IdtAmount, State, UserAddress},
+use std::collections::{HashMap, HashSet};
+
+use crate::identity::{
+    IdentityService, IdtAmount, SystemPenalty, UserAddress, next_timestamp,
+    punish::{PENALTY_VOUCHEE_WEIGHT_RATIO, penalty},
 };
 
 pub const FORGET_PENALTY: IdtAmount = 500;
 
-pub async fn forget(state: &mut State, user: UserAddress, vouchee: UserAddress) {
-    let vouchee_penalty = penalty(state, &vouchee)
+impl IdentityService {
+    pub async fn forget_with_timestamp(
+        &self,
+        user: UserAddress,
+        vouchee: UserAddress,
+        timestamp: u64,
+    ) {
+        let vouchee_penalty = penalty(self, &vouchee)
+            .await
+            .saturating_mul(PENALTY_VOUCHEE_WEIGHT_RATIO.0.into())
+            .saturating_div(PENALTY_VOUCHEE_WEIGHT_RATIO.1.into());
+        let event = SystemPenalty {
+            idt_balance: FORGET_PENALTY + vouchee_penalty,
+            timestamp,
+        };
+        self.vouches
+            .write()
+            .expect("Poisoned RwLock detected")
+            .vouchers
+            .entry(vouchee.clone())
+            .and_modify(|v| {
+                v.remove(&user);
+            });
+        self.vouches
+            .write()
+            .expect("Poisoned RwLock detected")
+            .vouchees
+            .entry(user.clone())
+            .and_modify(|v| {
+                v.remove(&vouchee);
+            });
+        self.penalties
+            .write()
+            .expect("Poisoned RwLock detected")
+            .forget_penalties
+            .entry(user)
+            .and_modify(|v| {
+                v.insert(vouchee.clone(), event.clone());
+            })
+            .or_insert_with(move || HashMap::from([(vouchee, event)]));
+    }
+
+    pub fn forgotten_users(&self, user: &UserAddress) -> HashSet<UserAddress> {
+        self.penalties
+            .read()
+            .expect("Poisoned RwLock detected")
+            .forget_penalties
+            .get(user)
+            .cloned()
+            .unwrap_or_default()
+            .into_keys()
+            .collect()
+    }
+
+    // removes first penalty of the user, if available
+    // allows to clean up outdated penalties
+    pub fn delete_forgotten(&self, user: UserAddress, forgotten: &UserAddress) {
+        self.penalties
+            .write()
+            .expect("Poisoned RwLock detected")
+            .forget_penalties
+            .entry(user)
+            .and_modify(|v| {
+                v.remove(forgotten);
+            });
+    }
+}
+
+pub async fn forget(service: &IdentityService, user: UserAddress, vouchee: UserAddress) {
+    service
+        .forget_with_timestamp(user, vouchee, next_timestamp())
         .await
-        .saturating_mul(PENALTY_VOUCHEE_WEIGHT_RATIO.0.into())
-        .saturating_div(PENALTY_VOUCHEE_WEIGHT_RATIO.1.into());
-    state.forget(
-        user.clone(),
-        vouchee,
-        FORGET_PENALTY + vouchee_penalty,
-        next_timestamp(),
-    );
 }
 
 #[cfg(test)]
 mod tests {
     use crate::identity::{
-        idt::idt_balance,
-        proof::idt_by_proof,
+        idt::balance,
+        proof::prove,
         punish::punish,
         tests::{MODERATOR, PROOF_ID, USER_A},
         vouch::vouch,
@@ -36,116 +96,110 @@ mod tests {
     #[async_std::test]
     async fn test_basic() {
         let user_b = "userB";
-        let mut state = State::default();
-        let _ = idt_by_proof(
-            &mut state,
+        let service = IdentityService::default();
+        let _ = prove(
+            &service,
             USER_A.to_string(),
             MODERATOR.to_string(),
             10000,
             PROOF_ID,
         );
-        vouch(&mut state, USER_A.to_string(), user_b.to_string());
-        assert_eq!(idt_balance(&state, &USER_A.to_string()).await, 10000);
-        assert_eq!(idt_balance(&state, &user_b.to_string()).await, 1000);
-        forget(&mut state, USER_A.to_string(), user_b.to_string()).await;
-        assert_eq!(idt_balance(&state, &USER_A.to_string()).await, 9500);
-        assert_eq!(idt_balance(&state, &user_b.to_string()).await, 0);
-        assert_eq!(penalty(&state, &USER_A.to_string()).await, 500);
+        vouch(&service, USER_A.to_string(), user_b.to_string());
+        assert_eq!(balance(&service, &USER_A.to_string()).await, 10000);
+        assert_eq!(balance(&service, &user_b.to_string()).await, 1000);
+        forget(&service, USER_A.to_string(), user_b.to_string()).await;
+        assert_eq!(balance(&service, &USER_A.to_string()).await, 9500);
+        assert_eq!(balance(&service, &user_b.to_string()).await, 0);
+        assert_eq!(penalty(&service, &USER_A.to_string()).await, 500);
     }
 
     #[async_std::test]
     async fn test_keep_penalty() {
         let user_b = "userB";
-        let mut state = State::default();
-        let _ = idt_by_proof(
-            &mut state,
+        let service = IdentityService::default();
+        let _ = prove(
+            &service,
             USER_A.to_string(),
             MODERATOR.to_string(),
             10000,
             PROOF_ID,
         );
-        vouch(&mut state, USER_A.to_string(), user_b.to_string());
-        assert_eq!(idt_balance(&state, &USER_A.to_string()).await, 10000);
-        assert_eq!(idt_balance(&state, &user_b.to_string()).await, 1000);
+        vouch(&service, USER_A.to_string(), user_b.to_string());
+        assert_eq!(balance(&service, &USER_A.to_string()).await, 10000);
+        assert_eq!(balance(&service, &user_b.to_string()).await, 1000);
         punish(
-            &mut state,
+            &service,
             user_b.to_string(),
             MODERATOR.to_string(),
             500,
             PROOF_ID,
         );
-        assert_eq!(idt_balance(&state, &USER_A.to_string()).await, 9950);
-        assert_eq!(idt_balance(&state, &user_b.to_string()).await, 495);
-        forget(&mut state, USER_A.to_string(), user_b.to_string()).await;
-        assert_eq!(idt_balance(&state, &USER_A.to_string()).await, 9450);
-        assert_eq!(idt_balance(&state, &user_b.to_string()).await, 0);
-        assert_eq!(penalty(&state, &USER_A.to_string()).await, 550);
+        assert_eq!(balance(&service, &USER_A.to_string()).await, 9950);
+        assert_eq!(balance(&service, &user_b.to_string()).await, 495);
+        forget(&service, USER_A.to_string(), user_b.to_string()).await;
+        assert_eq!(balance(&service, &USER_A.to_string()).await, 9450);
+        assert_eq!(balance(&service, &user_b.to_string()).await, 0);
+        assert_eq!(penalty(&service, &USER_A.to_string()).await, 550);
     }
 
     #[async_std::test]
     async fn test_multiple_penalties() {
         let user_b = "userB";
         let user_c = "userC";
-        let mut state = State::default();
-        let _ = idt_by_proof(
-            &mut state,
+        let service = IdentityService::default();
+        let _ = prove(
+            &service,
             USER_A.to_string(),
             MODERATOR.to_string(),
             10000,
             PROOF_ID,
         );
-        vouch(&mut state, USER_A.to_string(), user_b.to_string());
-        vouch(&mut state, USER_A.to_string(), user_c.to_string());
-        assert_eq!(idt_balance(&state, &USER_A.to_string()).await, 10000);
-        assert_eq!(idt_balance(&state, &user_b.to_string()).await, 1000);
-        assert_eq!(idt_balance(&state, &user_c.to_string()).await, 1000);
-        forget(&mut state, USER_A.to_string(), user_b.to_string()).await;
-        assert_eq!(idt_balance(&state, &USER_A.to_string()).await, 9500);
-        assert_eq!(idt_balance(&state, &user_b.to_string()).await, 0);
-        assert_eq!(penalty(&state, &USER_A.to_string()).await, 500);
-        forget(&mut state, USER_A.to_string(), user_c.to_string()).await;
-        assert_eq!(idt_balance(&state, &USER_A.to_string()).await, 9000);
-        assert_eq!(idt_balance(&state, &user_c.to_string()).await, 0);
-        assert_eq!(penalty(&state, &USER_A.to_string()).await, 1000);
+        vouch(&service, USER_A.to_string(), user_b.to_string());
+        vouch(&service, USER_A.to_string(), user_c.to_string());
+        assert_eq!(balance(&service, &USER_A.to_string()).await, 10000);
+        assert_eq!(balance(&service, &user_b.to_string()).await, 1000);
+        assert_eq!(balance(&service, &user_c.to_string()).await, 1000);
+        forget(&service, USER_A.to_string(), user_b.to_string()).await;
+        assert_eq!(balance(&service, &USER_A.to_string()).await, 9500);
+        assert_eq!(balance(&service, &user_b.to_string()).await, 0);
+        assert_eq!(penalty(&service, &USER_A.to_string()).await, 500);
+        forget(&service, USER_A.to_string(), user_c.to_string()).await;
+        assert_eq!(balance(&service, &USER_A.to_string()).await, 9000);
+        assert_eq!(balance(&service, &user_c.to_string()).await, 0);
+        assert_eq!(penalty(&service, &USER_A.to_string()).await, 1000);
     }
 
     #[async_std::test]
     async fn test_multiple_penalties_decay() {
         let user_b = "userB";
         let user_c = "userC";
-        let mut state = State::default();
+        let service = IdentityService::default();
         let ts = next_timestamp();
-        let _ = idt_by_proof(
-            &mut state,
+        let _ = prove(
+            &service,
             USER_A.to_string(),
             MODERATOR.to_string(),
             10000,
             PROOF_ID,
         );
-        vouch(&mut state, USER_A.to_string(), user_b.to_string());
-        vouch(&mut state, USER_A.to_string(), user_c.to_string());
-        assert_eq!(idt_balance(&state, &USER_A.to_string()).await, 10000);
-        assert_eq!(idt_balance(&state, &user_b.to_string()).await, 1000);
-        assert_eq!(idt_balance(&state, &user_c.to_string()).await, 1000);
+        vouch(&service, USER_A.to_string(), user_b.to_string());
+        vouch(&service, USER_A.to_string(), user_c.to_string());
+        assert_eq!(balance(&service, &USER_A.to_string()).await, 10000);
+        assert_eq!(balance(&service, &user_b.to_string()).await, 1000);
+        assert_eq!(balance(&service, &user_c.to_string()).await, 1000);
         // this is implementation of forget() but with overriden timestamp
-        state.forget(
-            USER_A.to_string(),
-            user_b.to_string(),
-            FORGET_PENALTY,
-            ts - 86400 * 2,
-        );
-        assert_eq!(idt_balance(&state, &USER_A.to_string()).await, 9502);
-        assert_eq!(idt_balance(&state, &user_b.to_string()).await, 0);
-        assert_eq!(penalty(&state, &USER_A.to_string()).await, 498);
-        state.forget(
-            USER_A.to_string(),
-            user_c.to_string(),
-            FORGET_PENALTY,
-            ts - 86400,
-        );
-        assert_eq!(idt_balance(&state, &USER_A.to_string()).await, 9003);
-        assert_eq!(idt_balance(&state, &user_c.to_string()).await, 0);
+        service
+            .forget_with_timestamp(USER_A.to_string(), user_b.to_string(), ts - 86400 * 2)
+            .await;
+        assert_eq!(balance(&service, &USER_A.to_string()).await, 9502);
+        assert_eq!(balance(&service, &user_b.to_string()).await, 0);
+        assert_eq!(penalty(&service, &USER_A.to_string()).await, 498);
+        service
+            .forget_with_timestamp(USER_A.to_string(), user_c.to_string(), ts - 86400)
+            .await;
+        assert_eq!(balance(&service, &USER_A.to_string()).await, 9003);
+        assert_eq!(balance(&service, &user_c.to_string()).await, 0);
         // penalties from forget() decay simultaneously for all forgotten users
-        assert_eq!(penalty(&state, &USER_A.to_string()).await, 997);
+        assert_eq!(penalty(&service, &USER_A.to_string()).await, 997);
     }
 }
