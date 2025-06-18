@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::identity::{IdentityService, UserAddress, VouchEvent, next_timestamp};
+use crate::identity::{IdentityService, UserAddress, next_timestamp};
 
 impl IdentityService {
     pub fn vouch_with_timestamp(&self, from: UserAddress, to: UserAddress, timestamp: u64) {
@@ -29,7 +29,7 @@ impl IdentityService {
             });
     }
 
-    pub fn voucher_timestamp(&self, user: &UserAddress, voucher: &UserAddress) -> Option<u64> {
+    pub fn vouchers_with_time(&self, user: &UserAddress) -> HashMap<UserAddress, u64> {
         self.vouches
             .read()
             .expect("Poisoned RwLock detected")
@@ -37,24 +37,9 @@ impl IdentityService {
             .get(user)
             .cloned()
             .unwrap_or_default()
-            .get(voucher)
-            .copied()
     }
 
-    pub fn vouchers_with_time(&self, user: &UserAddress) -> Vec<VouchEvent> {
-        self.vouches
-            .read()
-            .expect("Poisoned RwLock detected")
-            .vouchers
-            .get(user)
-            .cloned()
-            .unwrap_or_default()
-            .iter()
-            .map(|(k, v)| (k.clone(), *v))
-            .collect()
-    }
-
-    pub fn vouchee_timestamp(&self, user: &UserAddress, vouchee: &UserAddress) -> Option<u64> {
+    pub fn vouchees_with_time(&self, user: &UserAddress) -> HashMap<UserAddress, u64> {
         self.vouches
             .read()
             .expect("Poisoned RwLock detected")
@@ -62,21 +47,6 @@ impl IdentityService {
             .get(user)
             .cloned()
             .unwrap_or_default()
-            .get(vouchee)
-            .copied()
-    }
-
-    pub fn vouchees_with_time(&self, user: &UserAddress) -> Vec<VouchEvent> {
-        self.vouches
-            .read()
-            .expect("Poisoned RwLock detected")
-            .vouchees
-            .get(user)
-            .cloned()
-            .unwrap_or_default()
-            .iter()
-            .map(|(k, v)| (k.clone(), *v))
-            .collect()
     }
 }
 
@@ -85,19 +55,27 @@ pub fn vouch(service: &IdentityService, from: UserAddress, to: UserAddress) {
 }
 
 pub fn vouchers(service: &IdentityService, user: &UserAddress) -> Vec<UserAddress> {
-    service
-        .vouchers_with_time(user)
-        .iter()
-        .map(|(k, _v)| k.clone())
-        .collect()
+    service.vouchers_with_time(user).into_keys().collect()
 }
 
 pub fn vouchees(service: &IdentityService, user: &UserAddress) -> Vec<UserAddress> {
-    service
-        .vouchees_with_time(user)
-        .iter()
-        .map(|(k, _v)| k.clone())
-        .collect()
+    service.vouchees_with_time(user).into_keys().collect()
+}
+
+pub fn voucher_timestamp(
+    service: &IdentityService,
+    user: &UserAddress,
+    voucher: &UserAddress,
+) -> Option<u64> {
+    service.vouchers_with_time(user).get(voucher).copied()
+}
+
+pub fn vouchee_timestamp(
+    service: &IdentityService,
+    user: &UserAddress,
+    vouchee: &UserAddress,
+) -> Option<u64> {
+    service.vouchees_with_time(user).get(vouchee).copied()
 }
 
 #[cfg(test)]

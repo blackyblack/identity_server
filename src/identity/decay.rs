@@ -1,4 +1,7 @@
-use crate::identity::{IdentityService, IdtAmount, SystemPenalty, UserAddress, next_timestamp};
+use crate::identity::{
+    IdentityService, IdtAmount, SystemPenalty, UserAddress, next_timestamp,
+    vouch::voucher_timestamp,
+};
 
 fn flat_one_idt_decay(event_timestamp: u64) -> IdtAmount {
     let now = next_timestamp();
@@ -13,7 +16,7 @@ fn flat_one_idt_decay(event_timestamp: u64) -> IdtAmount {
 pub fn proof_decay(service: &IdentityService, user: &UserAddress) -> IdtAmount {
     let (timestamp, _balance) = match service.proof(user) {
         None => return 0,
-        Some(e) => (e.timestamp, e.idt_balance),
+        Some(e) => (e.timestamp, e.amount),
     };
     flat_one_idt_decay(timestamp)
 }
@@ -21,7 +24,7 @@ pub fn proof_decay(service: &IdentityService, user: &UserAddress) -> IdtAmount {
 pub fn moderator_penalty_decay(service: &IdentityService, user: &UserAddress) -> IdtAmount {
     let (timestamp, _penalty) = match service.moderator_penalty(user) {
         None => return 0,
-        Some(e) => (e.timestamp, e.idt_balance),
+        Some(e) => (e.timestamp, e.amount),
     };
     flat_one_idt_decay(timestamp)
 }
@@ -34,7 +37,7 @@ pub fn vouch_decay(
     user: &UserAddress,
     voucher: &UserAddress,
 ) -> IdtAmount {
-    let timestamp = match service.voucher_timestamp(user, voucher) {
+    let timestamp = match voucher_timestamp(service, user, voucher) {
         None => return 0,
         Some(e) => e,
     };
@@ -164,21 +167,21 @@ mod tests {
         let ts = next_timestamp();
         assert_eq!(
             system_penalty_decay(&SystemPenalty {
-                idt_balance: 10,
+                amount: 10,
                 timestamp: ts
             }),
             0
         );
         assert_eq!(
             system_penalty_decay(&SystemPenalty {
-                idt_balance: 10,
+                amount: 10,
                 timestamp: ts - 86400
             }),
             1
         );
         assert_eq!(
             system_penalty_decay(&SystemPenalty {
-                idt_balance: 10,
+                amount: 10,
                 timestamp: ts - 86400 * 2
             }),
             2

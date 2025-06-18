@@ -57,7 +57,7 @@ impl Visitor for VouchTree<'_> {
         let proven_balance = {
             let proven_balance = match self.service.proof(node) {
                 None => 0,
-                Some(e) => e.idt_balance,
+                Some(e) => e.amount,
             };
             let proven_balance_decay = proof_decay(self.service, node);
             balance_after_decay(proven_balance, proven_balance_decay)

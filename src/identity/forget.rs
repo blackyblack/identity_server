@@ -1,11 +1,6 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
-use crate::identity::{
-    IdentityService, IdtAmount, SystemPenalty, UserAddress, next_timestamp,
-    punish::{PENALTY_VOUCHEE_WEIGHT_RATIO, penalty},
-};
-
-pub const FORGET_PENALTY: IdtAmount = 500;
+use crate::identity::{IdentityService, UserAddress, next_timestamp};
 
 impl IdentityService {
     pub async fn forget_with_timestamp(
@@ -14,39 +9,20 @@ impl IdentityService {
         vouchee: UserAddress,
         timestamp: u64,
     ) {
-        let vouchee_penalty = penalty(self, &vouchee)
-            .await
-            .saturating_mul(PENALTY_VOUCHEE_WEIGHT_RATIO.0.into())
-            .saturating_div(PENALTY_VOUCHEE_WEIGHT_RATIO.1.into());
-        let event = SystemPenalty {
-            idt_balance: FORGET_PENALTY + vouchee_penalty,
-            timestamp,
-        };
-        self.vouches
-            .write()
-            .expect("Poisoned RwLock detected")
-            .vouchers
-            .entry(vouchee.clone())
-            .and_modify(|v| {
-                v.remove(&user);
-            });
-        self.vouches
-            .write()
-            .expect("Poisoned RwLock detected")
-            .vouchees
-            .entry(user.clone())
-            .and_modify(|v| {
+        {
+            let mut vouches_lock = self.vouches.write().expect("Poisoned RwLock detected");
+            vouches_lock
+                .vouchers
+                .entry(vouchee.clone())
+                .and_modify(|v| {
+                    v.remove(&user);
+                });
+            vouches_lock.vouchees.entry(user.clone()).and_modify(|v| {
                 v.remove(&vouchee);
             });
-        self.penalties
-            .write()
-            .expect("Poisoned RwLock detected")
-            .forget_penalties
-            .entry(user)
-            .and_modify(|v| {
-                v.insert(vouchee.clone(), event.clone());
-            })
-            .or_insert_with(move || HashMap::from([(vouchee, event)]));
+        }
+        self.punish_for_forgetting_with_timestamp(user, vouchee, timestamp)
+            .await;
     }
 
     pub fn forgotten_users(&self, user: &UserAddress) -> HashSet<UserAddress> {
@@ -61,7 +37,6 @@ impl IdentityService {
             .collect()
     }
 
-    // removes first penalty of the user, if available
     // allows to clean up outdated penalties
     pub fn delete_forgotten(&self, user: UserAddress, forgotten: &UserAddress) {
         self.penalties
@@ -86,7 +61,7 @@ mod tests {
     use crate::identity::{
         idt::balance,
         proof::prove,
-        punish::punish,
+        punish::{penalty, punish},
         tests::{MODERATOR, PROOF_ID, USER_A},
         vouch::vouch,
     };

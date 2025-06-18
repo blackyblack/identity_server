@@ -18,7 +18,7 @@ impl IdentityService {
         }
         let event = ModeratorProof {
             moderator,
-            idt_balance: balance,
+            amount: balance,
             proof_id,
             timestamp,
         };
@@ -68,7 +68,7 @@ mod tests {
             )
             .is_ok()
         );
-        assert_eq!(service.proof(&USER_A.to_string()).unwrap().idt_balance, 100);
+        assert_eq!(service.proof(&USER_A.to_string()).unwrap().amount, 100);
         assert_eq!(
             service.proof(&USER_A.to_string()).unwrap().moderator,
             MODERATOR
@@ -80,7 +80,7 @@ mod tests {
         assert!(service.proof(&USER_A.to_string()).unwrap().timestamp > 0);
 
         assert!(prove(&service, USER_A.to_string(), MODERATOR.to_string(), 200, 2).is_ok());
-        assert_eq!(service.proof(&USER_A.to_string()).unwrap().idt_balance, 200);
+        assert_eq!(service.proof(&USER_A.to_string()).unwrap().amount, 200);
         assert_eq!(
             service.proof(&USER_A.to_string()).unwrap().moderator,
             MODERATOR
@@ -105,10 +105,7 @@ mod tests {
             )
             .is_ok()
         );
-        assert_eq!(
-            service.proof(&USER_A.to_string()).unwrap().idt_balance,
-            40000
-        );
+        assert_eq!(service.proof(&USER_A.to_string()).unwrap().amount, 40000);
         assert!(
             prove(
                 &service,
@@ -119,10 +116,7 @@ mod tests {
             )
             .is_err()
         );
-        assert_eq!(
-            service.proof(&USER_A.to_string()).unwrap().idt_balance,
-            40000
-        );
+        assert_eq!(service.proof(&USER_A.to_string()).unwrap().amount, 40000);
         assert!(
             prove(
                 &service,
@@ -133,9 +127,6 @@ mod tests {
             )
             .is_err()
         );
-        assert_eq!(
-            service.proof(&USER_A.to_string()).unwrap().idt_balance,
-            40000
-        );
+        assert_eq!(service.proof(&USER_A.to_string()).unwrap().amount, 40000);
     }
 }

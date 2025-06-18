@@ -17,6 +17,7 @@ pub const MAX_VOUCHEE_PENALTY: IdtAmount = MAX_IDT_BY_PROOF * 2;
 // vouchee's penalty is multipled to this coefficient before adding to voucher penalty
 // stored as (nominator, denominator) to avoid floating point operations
 pub const PENALTY_VOUCHEE_WEIGHT_RATIO: (u64, u64) = (1, 10);
+pub const FORGET_PENALTY: IdtAmount = 500;
 
 struct PenaltyTree<'a> {
     service: &'a IdentityService,
@@ -68,7 +69,13 @@ fn forgotten_penalties_sum(
             Some(p) => p,
         };
         let decay = system_penalty_decay(&vouchee_penalty);
-        acc + balance_after_decay(vouchee_penalty.idt_balance, decay)
+        let result_penalty = balance_after_decay(vouchee_penalty.amount, decay);
+        // cleanup outdated penalties
+        if result_penalty == 0 {
+            service.delete_forgotten(user.clone(), p);
+            return acc;
+        }
+        acc + result_penalty
     })
 }
 
@@ -82,7 +89,7 @@ impl Visitor for PenaltyTree<'_> {
         let proven_penalty = {
             let proven_penalty = match self.service.moderator_penalty(node) {
                 None => 0,
-                Some(e) => e.idt_balance,
+                Some(e) => e.amount,
             };
             let proven_penalty_decay = moderator_penalty_decay(self.service, node);
             balance_after_decay(proven_penalty, proven_penalty_decay)
@@ -105,7 +112,7 @@ impl IdentityService {
     ) {
         let event = ModeratorProof {
             moderator,
-            idt_balance: balance,
+            amount: balance,
             proof_id,
             timestamp,
         };
@@ -114,6 +121,31 @@ impl IdentityService {
             .expect("Poisoned RwLock detected")
             .moderator_penalty
             .insert(user, event);
+    }
+
+    pub async fn punish_for_forgetting_with_timestamp(
+        &self,
+        user: UserAddress,
+        vouchee: UserAddress,
+        timestamp: u64,
+    ) {
+        let vouchee_penalty = penalty(self, &vouchee)
+            .await
+            .saturating_mul(PENALTY_VOUCHEE_WEIGHT_RATIO.0.into())
+            .saturating_div(PENALTY_VOUCHEE_WEIGHT_RATIO.1.into());
+        let event = SystemPenalty {
+            amount: FORGET_PENALTY + vouchee_penalty,
+            timestamp,
+        };
+        self.penalties
+            .write()
+            .expect("Poisoned RwLock detected")
+            .forget_penalties
+            .entry(user)
+            .and_modify(|v| {
+                v.insert(vouchee.clone(), event.clone());
+            })
+            .or_insert_with(move || HashMap::from([(vouchee, event)]));
     }
 
     pub fn moderator_penalty(&self, user: &UserAddress) -> Option<ModeratorProof> {
@@ -149,6 +181,16 @@ pub fn punish(
     service.punish_with_timestamp(user, moderator, balance, proof_id, next_timestamp())
 }
 
+pub async fn punish_for_forgetting(
+    service: &IdentityService,
+    user: UserAddress,
+    vouchee: UserAddress,
+) {
+    service
+        .punish_for_forgetting_with_timestamp(user, vouchee, next_timestamp())
+        .await
+}
+
 pub async fn penalty(service: &IdentityService, user: &UserAddress) -> IdtAmount {
     let tree = PenaltyTree { service };
     walk_tree(&tree, user).await
@@ -159,6 +201,7 @@ mod tests {
     use crate::identity::{
         IdentityService,
         idt::balance,
+        next_timestamp,
         proof::prove,
         punish::{penalty, punish},
         tests::{MODERATOR, PROOF_ID, USER_A},
@@ -181,7 +224,7 @@ mod tests {
             service
                 .moderator_penalty(&USER_A.to_string())
                 .unwrap()
-                .idt_balance,
+                .amount,
             100
         );
         assert_eq!(
@@ -343,5 +386,44 @@ mod tests {
         // penalty from vouchees is limited to 2 * MAX_IDT_BY_PROOF
         assert_eq!(penalty(&service, &user_b.to_string()).await, 150000);
         assert_eq!(penalty(&service, &USER_A.to_string()).await, 10000);
+    }
+
+    #[async_std::test]
+    async fn test_cleanup_forgotten_penalty() {
+        let service = IdentityService::default();
+        let user_b = "userB";
+        let ts = next_timestamp();
+        assert_eq!(penalty(&service, &USER_A.to_string()).await, 0);
+        service
+            .punish_for_forgetting_with_timestamp(USER_A.to_string(), user_b.to_string(), ts)
+            .await;
+        assert_eq!(penalty(&service, &USER_A.to_string()).await, 500);
+        service
+            .punish_for_forgetting_with_timestamp(
+                USER_A.to_string(),
+                user_b.to_string(),
+                ts - 86400,
+            )
+            .await;
+        assert_eq!(penalty(&service, &USER_A.to_string()).await, 499);
+        assert!(
+            service
+                .forgotten_penalty(&USER_A.to_string(), &user_b.to_string())
+                .is_some()
+        );
+        service
+            .punish_for_forgetting_with_timestamp(
+                USER_A.to_string(),
+                user_b.to_string(),
+                ts - 86400 * 500,
+            )
+            .await;
+        assert_eq!(penalty(&service, &USER_A.to_string()).await, 0);
+        // forgotten penalty is cleaned up
+        assert!(
+            service
+                .forgotten_penalty(&USER_A.to_string(), &user_b.to_string())
+                .is_none()
+        );
     }
 }

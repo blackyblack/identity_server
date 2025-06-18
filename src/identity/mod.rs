@@ -14,8 +14,6 @@ mod tree_walk;
 pub mod vouch;
 
 pub type UserAddress = String;
-// tuple of voucher or vouchee and vouch timestamp in seconds
-pub type VouchEvent = (UserAddress, u64);
 pub type ProofId = u128;
 pub type IdtAmount = u128;
 
@@ -32,7 +30,7 @@ struct VouchStorage {
 #[derive(Clone)]
 pub struct ModeratorProof {
     pub moderator: UserAddress,
-    pub idt_balance: IdtAmount,
+    pub amount: IdtAmount,
     pub proof_id: ProofId,
     pub timestamp: u64,
 }
@@ -45,7 +43,7 @@ type ProofStorage = HashMap<UserAddress, ModeratorProof>;
 // system can generate own penalties, so proof_id and moderator are not required
 #[derive(Clone, Default)]
 pub struct SystemPenalty {
-    pub idt_balance: IdtAmount,
+    pub amount: IdtAmount,
     pub timestamp: u64,
 }
 
