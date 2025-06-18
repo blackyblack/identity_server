@@ -6,7 +6,7 @@ pub trait Visitor {
     // called when all children of the node are processed
     // visited_branch contains all children, no duplicates
     // balances contain temporary balances of the processed nodes
-    // returns balance of the current nodeS
+    // returns balance of the current node
     async fn exit_node(
         &self,
         node: &UserAddress,
@@ -30,10 +30,11 @@ pub async fn walk_tree<T>(tree: &T, root: &UserAddress) -> IdtAmount
 where
     T: ChildrenSelector + Visitor,
 {
+    // Stack used for depth-first traversal of the tree
     let mut stack = vec![];
     // balances may have different values for the same user but during branch
     // processing it should have the same balance for the same user
-    let mut balances: HashMap<UserAddress, IdtAmount> = HashMap::default();
+    let mut balances: HashMap<UserAddress, IdtAmount> = HashMap::new();
 
     stack.push((
         root.clone(),
@@ -62,6 +63,7 @@ where
                 },
             ));
             for v in tree.children(&user).await {
+                // Skip nodes that have already been visited to avoid cycles in the tree traversal
                 if visited_branch.contains(&v) {
                     continue;
                 }
