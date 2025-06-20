@@ -18,3 +18,56 @@ pub async fn route(req: Request<IdentityService>) -> tide::Result {
         .build();
     Ok(response)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::identity::{
+        proof::prove,
+        tests::{MODERATOR, PROOF_ID, USER_A},
+    };
+    use serde_json::Value;
+    use tide::http::{Request as HttpRequest, Response, Url};
+
+    #[async_std::test]
+    async fn test_basic() {
+        let service = IdentityService::default();
+
+        let _ = prove(
+            &service,
+            USER_A.to_string(),
+            MODERATOR.to_string(),
+            100,
+            PROOF_ID,
+        );
+
+        let req_url = format!("/idt/{USER_A}");
+        let req = HttpRequest::new(
+            tide::http::Method::Get,
+            Url::parse(&format!("http://example.com{}", req_url)).unwrap(),
+        );
+        let mut server = tide::with_state(service);
+        server.at("/idt/:user").get(route);
+
+        let mut response: Response = server.respond(req).await.unwrap();
+        assert_eq!(response.status(), 200);
+        let body: Value = response.body_json().await.unwrap();
+        assert_eq!(body["user"], USER_A);
+        assert_eq!(body["idt"], "100");
+    }
+
+    #[async_std::test]
+    async fn test_bad_route() {
+        let service = IdentityService::default();
+        let req_url = format!("/idt");
+        let req = HttpRequest::new(
+            tide::http::Method::Get,
+            Url::parse(&format!("http://example.com{}", req_url)).unwrap(),
+        );
+        let mut server = tide::with_state(service);
+        server.at("/idt/:user").get(route);
+
+        let response: Response = server.respond(req).await.unwrap();
+        assert_eq!(response.status(), 404);
+    }
+}

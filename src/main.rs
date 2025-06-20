@@ -42,4 +42,5 @@ async fn start_server(identity_service: IdentityService) -> Result<(), Error> {
 
 async fn setup_routes(server: &mut Server<IdentityService>) {
     server.at("/idt/:user").get(routes::idt::route);
+    server.at("/vouch/:user").post(routes::vouch::route);
 }
