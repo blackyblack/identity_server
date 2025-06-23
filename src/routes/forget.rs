@@ -4,18 +4,18 @@ use serde::Deserialize;
 use serde_json::json;
 use tide::{Request, Response, http::mime};
 
-use crate::identity::{IdentityService, UserAddress, idt::balance, vouch::vouch};
+use crate::identity::{IdentityService, UserAddress, forget::forget, idt::balance};
 
 #[derive(Deserialize)]
-struct VouchRequest {
+struct ForgetRequest {
     from: UserAddress,
 }
 
 pub async fn route(mut req: Request<IdentityService>) -> tide::Result {
     let vouchee = req.param("user")?.to_string();
-    let body: VouchRequest = req.body_json().await?;
+    let body: ForgetRequest = req.body_json().await?;
     let voucher = body.from;
-    vouch(req.state(), voucher.clone(), vouchee.clone());
+    forget(req.state(), voucher.clone(), vouchee.clone()).await;
     let voucher_balance = balance(req.state(), &voucher).await;
     let response: HashMap<String, serde_json::Value> = HashMap::from([
         ("from".into(), voucher.into()),
@@ -35,23 +35,25 @@ mod tests {
     use crate::identity::{
         proof::prove,
         tests::{MODERATOR, PROOF_ID, USER_A},
+        vouch::vouch,
     };
     use serde_json::Value;
     use tide::http::{Request as HttpRequest, Response, Url};
 
     #[async_std::test]
-    async fn test_basic_vouch() {
+    async fn test_basic_forget() {
         let service = IdentityService::default();
         let user_b = "userB";
         let _ = prove(
             &service,
             USER_A.to_string(),
             MODERATOR.to_string(),
-            100,
+            10000,
             PROOF_ID,
         );
+        vouch(&service, USER_A.to_string(), user_b.to_string());
 
-        let req_url = format!("/vouch/{user_b}");
+        let req_url = format!("/forget/{user_b}");
         let body = json!({
             "from": USER_A
         });
@@ -64,7 +66,7 @@ mod tests {
         req.set_content_type(mime::JSON);
 
         let mut server = tide::with_state(service);
-        server.at("/vouch/:user").post(route);
+        server.at("/forget/:user").post(route);
 
         let mut response: Response = server.respond(req).await.unwrap();
 
@@ -72,8 +74,8 @@ mod tests {
         let body: Value = response.body_json().await.unwrap();
         assert_eq!(body["from"], USER_A);
         assert_eq!(body["to"], user_b);
-        // 10% from 100 IDT of the user A
-        assert_eq!(body["idt"], "10");
+        // 500 IDT penalty for forgetting
+        assert_eq!(body["idt"], "9500");
     }
 
     #[async_std::test]
@@ -82,7 +84,7 @@ mod tests {
         let user_b = "userB";
 
         // bad JSON format (missing "from" field)
-        let req_url = format!("/vouch/{user_b}");
+        let req_url = format!("/forget/{user_b}");
         let body = json!({
             "wrong_field": USER_A
         });
@@ -95,7 +97,7 @@ mod tests {
         req.set_content_type(mime::JSON);
 
         let mut server = tide::with_state(service);
-        server.at("/vouch/:user").post(route);
+        server.at("/forget/:user").post(route);
 
         let response: Response = server.respond(req).await.unwrap();
         assert!(
