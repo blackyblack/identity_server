@@ -4,8 +4,11 @@ use serde::Deserialize;
 use serde_json::json;
 use tide::{Request, Response, http::mime};
 
-use crate::identity::{
-    IdentityService, IdtAmount, ProofId, UserAddress, error::Error, idt::balance, proof::prove,
+use crate::{
+    identity::{
+        IdentityService, IdtAmount, ProofId, UserAddress, error::Error, idt::balance, proof::prove,
+    },
+    verify::{proof::proof_verify, signature::Signature},
 };
 
 #[derive(Deserialize)]
@@ -13,6 +16,8 @@ struct ProofRequest {
     moderator: UserAddress,
     amount: IdtAmount,
     proof_id: ProofId,
+    signature: String,
+    nonce: u64,
 }
 
 pub async fn route(mut req: Request<IdentityService>) -> tide::Result {
@@ -21,6 +26,29 @@ pub async fn route(mut req: Request<IdentityService>) -> tide::Result {
     let moderator = body.moderator;
     let amount = body.amount;
     let proof_id = body.proof_id;
+    {
+        let signature: Signature = Signature {
+            user: moderator.clone(),
+            signature: body.signature,
+            nonce: body.nonce,
+        };
+        if proof_verify(
+            &signature,
+            user.clone(),
+            amount,
+            proof_id,
+            &*req.state().nonce_manager(),
+        )
+        .is_err()
+        {
+            return Ok(Response::builder(400)
+                .body(json!({"error": "signature verification failed"}))
+                .content_type(mime::JSON)
+                .build());
+        }
+    }
+
+    // TODO: check if user has moderator rights
 
     let prove_result = prove(
         req.state(),
@@ -59,9 +87,12 @@ pub async fn route(mut req: Request<IdentityService>) -> tide::Result {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::identity::{
-        proof::MAX_IDT_BY_PROOF,
-        tests::{MODERATOR, PROOF_ID, USER_A},
+    use crate::{
+        identity::{
+            proof::MAX_IDT_BY_PROOF,
+            tests::{PROOF_ID, USER_A},
+        },
+        verify::{proof::proof_sign, random_keypair},
     };
     use serde_json::Value;
     use tide::http::{Request as HttpRequest, Response, Url};
@@ -71,12 +102,24 @@ mod tests {
         let service = IdentityService::default();
         let user_id = USER_A;
         let amount = 5000;
+        let (private_key, moderator) = random_keypair();
 
         let req_url = format!("/proof/{user_id}");
+        let signature = proof_sign(
+            &private_key,
+            user_id.to_string(),
+            amount,
+            PROOF_ID,
+            &*service.nonce_manager(),
+        )
+        .await
+        .expect("Should sign successfully");
         let body = json!({
-            "moderator": MODERATOR,
+            "moderator": moderator,
             "amount": amount,
-            "proof_id": PROOF_ID
+            "proof_id": PROOF_ID,
+            "signature": signature.signature,
+            "nonce": signature.nonce,
         });
 
         let mut req = HttpRequest::new(
@@ -94,7 +137,7 @@ mod tests {
         assert_eq!(response.status(), 200);
         let body: Value = response.body_json().await.unwrap();
         assert_eq!(body["user"], user_id);
-        assert_eq!(body["moderator"], MODERATOR);
+        assert_eq!(body["moderator"], moderator);
         assert_eq!(body["idt"], amount.to_string());
         assert_eq!(body["proof_id"], PROOF_ID.to_string());
     }
@@ -104,12 +147,24 @@ mod tests {
         let service = IdentityService::default();
         let user_id = USER_A;
         let amount = MAX_IDT_BY_PROOF + 1;
+        let (private_key, moderator) = random_keypair();
 
         let req_url = format!("/proof/{user_id}");
+        let signature = proof_sign(
+            &private_key,
+            user_id.to_string(),
+            amount,
+            PROOF_ID,
+            &*service.nonce_manager(),
+        )
+        .await
+        .expect("Should sign successfully");
         let body = json!({
-            "moderator": MODERATOR,
+            "moderator": moderator,
             "amount": amount,
-            "proof_id": PROOF_ID
+            "proof_id": PROOF_ID,
+            "signature": signature.signature,
+            "nonce": signature.nonce,
         });
 
         let mut req = HttpRequest::new(
@@ -130,14 +185,25 @@ mod tests {
     async fn test_bad_request_format() {
         let service = IdentityService::default();
         let user_id = USER_A;
+        let (private_key, moderator) = random_keypair();
 
         let req_url = format!("/proof/{user_id}");
+        let signature = proof_sign(
+            &private_key,
+            user_id.to_string(),
+            5000,
+            PROOF_ID,
+            &*service.nonce_manager(),
+        )
+        .await
+        .expect("Should sign successfully");
         let body = json!({
-            "moderator": MODERATOR,
+            "moderator": moderator,
             "wrong_field": "wrong_value",
-            "proof_id": PROOF_ID
+            "proof_id": PROOF_ID,
+            "signature": signature.signature,
+            "nonce": signature.nonce,
         });
-
         let mut req = HttpRequest::new(
             tide::http::Method::Post,
             Url::parse(&format!("http://example.com{}", req_url)).unwrap(),

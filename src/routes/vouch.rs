@@ -4,17 +4,35 @@ use serde::Deserialize;
 use serde_json::json;
 use tide::{Request, Response, http::mime};
 
-use crate::identity::{IdentityService, UserAddress, idt::balance, vouch::vouch};
+use crate::{
+    identity::{IdentityService, UserAddress, idt::balance, vouch::vouch},
+    verify::{signature::Signature, vouch::vouch_verify},
+};
 
 #[derive(Deserialize)]
 struct VouchRequest {
     from: UserAddress,
+    signature: String,
+    nonce: u64,
 }
 
 pub async fn route(mut req: Request<IdentityService>) -> tide::Result {
     let vouchee = req.param("user")?.to_string();
     let body: VouchRequest = req.body_json().await?;
     let voucher = body.from;
+    {
+        let signature: Signature = Signature {
+            user: voucher.clone(),
+            signature: body.signature,
+            nonce: body.nonce,
+        };
+        if vouch_verify(&signature, vouchee.clone(), &*req.state().nonce_manager()).is_err() {
+            return Ok(Response::builder(400)
+                .body(json!({"error": "signature verification failed"}))
+                .content_type(mime::JSON)
+                .build());
+        }
+    }
     vouch(req.state(), voucher.clone(), vouchee.clone());
     let voucher_balance = balance(req.state(), &voucher).await;
     let response: HashMap<String, serde_json::Value> = HashMap::from([
@@ -32,9 +50,12 @@ pub async fn route(mut req: Request<IdentityService>) -> tide::Result {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::identity::{
-        proof::prove,
-        tests::{MODERATOR, PROOF_ID, USER_A},
+    use crate::{
+        identity::{
+            proof::prove,
+            tests::{MODERATOR, PROOF_ID, USER_A},
+        },
+        verify::{random_keypair, vouch::vouch_sign},
     };
     use serde_json::Value;
     use tide::http::{Request as HttpRequest, Response, Url};
@@ -42,18 +63,24 @@ mod tests {
     #[async_std::test]
     async fn test_basic_vouch() {
         let service = IdentityService::default();
+        let (private_key, user_address) = random_keypair();
         let user_b = "userB";
         let _ = prove(
             &service,
-            USER_A.to_string(),
+            user_address.clone(),
             MODERATOR.to_string(),
             100,
             PROOF_ID,
         );
 
         let req_url = format!("/vouch/{user_b}");
+        let signature = vouch_sign(&private_key, user_b.to_string(), &*service.nonce_manager())
+            .await
+            .expect("Should sign successfully");
         let body = json!({
-            "from": USER_A
+            "from": user_address,
+            "signature": signature.signature,
+            "nonce": signature.nonce,
         });
 
         let mut req = HttpRequest::new(
@@ -70,10 +97,10 @@ mod tests {
 
         assert_eq!(response.status(), 200);
         let body: Value = response.body_json().await.unwrap();
-        assert_eq!(body["from"], USER_A);
+        assert_eq!(body["from"], user_address);
         assert_eq!(body["to"], user_b);
-        // 10% from 100 IDT of the user A
-        assert_eq!(body["idt"], "10");
+        // user A balance
+        assert_eq!(body["idt"], "100");
     }
 
     #[async_std::test]

@@ -4,6 +4,8 @@ use std::{
     time::SystemTime,
 };
 
+use crate::verify::nonce::{InMemoryNonceManager, NonceManager};
+
 mod decay;
 pub mod error;
 pub mod forget;
@@ -57,11 +59,37 @@ struct PenaltyStorage {
     forget_penalties: HashMap<UserAddress, HashMap<UserAddress, SystemPenalty>>,
 }
 
-#[derive(Default, Clone)]
+#[derive(Clone)]
 pub struct IdentityService {
     vouches: Arc<RwLock<VouchStorage>>,
     proofs: Arc<RwLock<ProofStorage>>,
     penalties: Arc<RwLock<PenaltyStorage>>,
+    nonce_manager: Arc<dyn NonceManager>,
+}
+
+impl IdentityService {
+    pub fn new(nonce_manager: Arc<dyn NonceManager>) -> Self {
+        Self {
+            vouches: Arc::new(RwLock::new(VouchStorage::default())),
+            proofs: Arc::new(RwLock::new(ProofStorage::default())),
+            penalties: Arc::new(RwLock::new(PenaltyStorage::default())),
+            nonce_manager,
+        }
+    }
+
+    pub fn new_inmem() -> Self {
+        Self::new(Arc::new(InMemoryNonceManager::default()))
+    }
+
+    pub fn nonce_manager(&self) -> Arc<dyn NonceManager> {
+        self.nonce_manager.clone()
+    }
+}
+
+impl Default for IdentityService {
+    fn default() -> Self {
+        Self::new_inmem()
+    }
 }
 
 pub fn next_timestamp() -> u64 {
