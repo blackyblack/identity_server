@@ -45,7 +45,7 @@ impl Signature {
 
 #[cfg(test)]
 mod tests {
-    use crate::verify::{nonce::InMemoryNonceManager, random_keypair};
+    use crate::verify::{error::Error, nonce::InMemoryNonceManager, random_keypair};
 
     use super::*;
 
@@ -128,6 +128,7 @@ mod tests {
             .expect("Should generate signature");
         assert!(signature.verify(message, &nonce_manager).is_ok());
         // second verification with the same nonce should fail
-        assert!(signature.verify(message, &nonce_manager).is_err());
+        let err = signature.verify(message, &nonce_manager).unwrap_err();
+        assert!(matches!(err, Error::NonceUsedError(_)));
     }
 }
