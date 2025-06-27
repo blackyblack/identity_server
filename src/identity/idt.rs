@@ -41,8 +41,7 @@ fn top_vouchers(
         };
         top_balances.push((v.clone(), voucher_balance));
     }
-    top_balances.sort();
-    top_balances.reverse();
+    top_balances.sort_by(|&(_, balance_a), &(_, balance_b)| balance_b.cmp(&balance_a));
     top_balances.truncate(TOP_VOUCHERS_SIZE.into());
     top_balances
 }
@@ -92,6 +91,7 @@ mod tests {
     };
 
     use super::*;
+    use std::collections::HashMap;
 
     #[async_std::test]
     async fn test_basic() {
@@ -291,6 +291,29 @@ mod tests {
         // 3000 + 0.1 * 7000 - 0.1 * 2000
         // only 5 top vouchers are considered
         assert_eq!(balance(&service, &USER_A.to_string()).await, 3500);
+    }
+
+    #[test]
+    fn test_voucher_sort_order() {
+        let user_a = USER_A.to_string();
+        let voucher_b = "userB".to_string();
+        let voucher_c = "userC".to_string();
+        let voucher_d = "userD".to_string();
+        let service = IdentityService::default();
+        vouch(&service, voucher_b.clone(), user_a.clone());
+        vouch(&service, voucher_c.clone(), user_a.clone());
+        vouch(&service, voucher_d.clone(), user_a.clone());
+
+        let mut balances = HashMap::new();
+        balances.insert(voucher_b.clone(), 5);
+        balances.insert(voucher_c.clone(), 10);
+        balances.insert(voucher_d.clone(), 8);
+
+        let top = top_vouchers(&service, &user_a, &im::HashSet::new(), &balances);
+        assert_eq!(top.len(), 3);
+        assert_eq!(top[0], (voucher_c, 10));
+        assert_eq!(top[1], (voucher_d, 8));
+        assert_eq!(top[2], (voucher_b, 5));
     }
 
     #[async_std::test]
