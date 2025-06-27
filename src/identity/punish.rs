@@ -14,7 +14,7 @@ use crate::identity::{
 // It only limits vouchee penalty because we do not want to limit amount of penalties and their value
 // for a single user but we do not want to propagate it across the network indefinitely.
 pub const MAX_VOUCHEE_PENALTY: IdtAmount = MAX_IDT_BY_PROOF * 2;
-// vouchee's penalty is multipled to this coefficient before adding to voucher penalty
+// vouchee's penalty is multiplied to this coefficient before adding to voucher penalty
 // stored as (nominator, denominator) to avoid floating point operations
 pub const PENALTY_VOUCHEE_WEIGHT_RATIO: (u64, u64) = (1, 10);
 pub const FORGET_PENALTY: IdtAmount = 500;
