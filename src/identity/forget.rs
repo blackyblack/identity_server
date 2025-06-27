@@ -162,7 +162,7 @@ mod tests {
         assert_eq!(balance(&service, &USER_A.to_string()).await, 10000);
         assert_eq!(balance(&service, &user_b.to_string()).await, 1000);
         assert_eq!(balance(&service, &user_c.to_string()).await, 1000);
-        // this is implementation of forget() but with overriden timestamp
+        // this is implementation of forget() but with overridden timestamp
         service
             .forget_with_timestamp(USER_A.to_string(), user_b.to_string(), ts - 86400 * 2)
             .await;
