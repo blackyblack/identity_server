@@ -69,7 +69,8 @@ mod tests {
             nonce: bad_nonce,
             ..signature
         };
-        assert!(forget_verify(&signature, user, &nonce_manager).is_err());
+        let err = forget_verify(&signature, user, &nonce_manager).unwrap_err();
+        assert!(matches!(err, Error::SignatureVerificationFailed(_)));
     }
 
     #[async_std::test]
