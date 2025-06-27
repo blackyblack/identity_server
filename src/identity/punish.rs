@@ -15,7 +15,7 @@ use crate::identity::{
 // for a single user but we do not want to propagate it across the network indefinitely.
 pub const MAX_VOUCHEE_PENALTY: IdtAmount = MAX_IDT_BY_PROOF * 2;
 // vouchee's penalty is multiplied to this coefficient before adding to voucher penalty
-// stored as (nominator, denominator) to avoid floating point operations
+// stored as (numerator, denominator)
 pub const PENALTY_VOUCHEE_WEIGHT_RATIO: (u64, u64) = (1, 10);
 pub const FORGET_PENALTY: IdtAmount = 500;
 

@@ -10,7 +10,7 @@ use crate::identity::{
 
 pub const TOP_VOUCHERS_SIZE: u16 = 5;
 // voucher's balance is multiplied to this coefficient before adding to vouchee balance,
-// stored as (nominator, denominator) to avoid floating point operations
+// stored as (numerator, denominator)
 pub const VOUCHER_WEIGHT_RATIO: (u64, u64) = (1, 10);
 
 struct VouchTree<'a> {
