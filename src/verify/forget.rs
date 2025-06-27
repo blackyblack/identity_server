@@ -82,6 +82,7 @@ mod tests {
             .expect("Should generate signature");
         assert!(forget_verify(&signature, user.clone(), &nonce_manager).is_ok());
         // duplicate verification with the same nonce should fail
-        assert!(forget_verify(&signature, user, &nonce_manager).is_err());
+        let err = forget_verify(&signature, user, &nonce_manager).unwrap_err();
+        assert!(matches!(err, Error::NonceUsedError(_)));
     }
 }
