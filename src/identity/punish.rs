@@ -269,7 +269,7 @@ mod tests {
             PROOF_ID,
         );
         assert_eq!(balance(&service, &USER_A.to_string()).await, 50);
-        assert_eq!(balance(&service, &USER_A.to_string()).await, 50);
+        assert_eq!(penalty(&service, &USER_A.to_string()).await, 50);
     }
 
     #[async_std::test]
