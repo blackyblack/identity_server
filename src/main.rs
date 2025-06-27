@@ -11,7 +11,8 @@ pub const DEFAULT_HOST: &str = "localhost";
 
 #[async_std::main]
 async fn main() -> Result<(), Error> {
-    dotenv::dotenv().expect("Should initialize env variables from .env");
+    // load environment variables from `.env` if present
+    let _ = dotenv::dotenv();
     // use INFO log level by default, disable all libraries logging
     // use RUST_LOG env variable to override log level
     let log_env = env_logger::Env::default().default_filter_or("info,tide=off");
