@@ -184,4 +184,60 @@ mod tests {
             "Expected a client error for bad request format"
         );
     }
+
+    #[async_std::test]
+    async fn test_unprivileged_request() {
+        // create a random keypair for a non-privileged user
+        let (private_key, _) = random_keypair();
+
+        let moderators = HashSet::from(["other_moderator".to_string()]);
+        let admin_storage = Arc::new(AdminStorage::new(HashSet::new(), moderators));
+
+        let state = State {
+            identity_service: IdentityService::default(),
+            admin_storage,
+            nonce_manager: Arc::new(InMemoryNonceManager::default()),
+        };
+
+        let target_user = "test_user".to_string();
+        let amount = 5000;
+        let req_url = format!("/punish/{target_user}");
+
+        let signature = punish_sign(
+            &private_key,
+            target_user.clone(),
+            amount,
+            PROOF_ID,
+            &*state.nonce_manager,
+        )
+        .await
+        .expect("Should sign successfully");
+
+        let body = json!({
+            "from": signature.signer,
+            "amount": amount,
+            "proof_id": PROOF_ID,
+            "signature": signature.signature,
+            "nonce": signature.nonce,
+        });
+
+        let mut req = HttpRequest::new(
+            tide::http::Method::Post,
+            Url::parse(&format!("http://example.com{}", req_url)).unwrap(),
+        );
+        req.set_body(serde_json::to_string(&body).unwrap());
+        req.set_content_type(mime::JSON);
+
+        let mut server = tide::with_state(state);
+        server.at("/punish/:user").post(route);
+
+        let mut response: Response = server.respond(req).await.unwrap();
+        assert_eq!(
+            response.status(),
+            403,
+            "Expected a 403 Forbidden response for unprivileged request"
+        );
+        let body: Value = response.body_json().await.unwrap();
+        assert_eq!(body["error"], "not moderator");
+    }
 }

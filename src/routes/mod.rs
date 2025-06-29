@@ -6,7 +6,7 @@ use crate::{
     verify::nonce::{InMemoryNonceManager, NonceManager},
 };
 
-pub mod admin;
+pub mod admins;
 pub mod forget;
 pub mod idt;
 pub mod proof;

@@ -61,6 +61,22 @@ async fn setup_routes(server: &mut Server<State>) {
     server.at("/vouch/:user").post(routes::vouch::route);
     server.at("/forget/:user").post(routes::forget::route);
     server.at("/punish/:user").post(routes::punish::route);
-    server.at("/admin/:user").get(routes::admin::get);
-    server.at("/admin/:user").post(routes::admin::post);
+    server
+        .at("/is_admin/:user")
+        .get(routes::admins::is_admin::route);
+    server
+        .at("/add_admin/:user")
+        .post(routes::admins::add_admin::route);
+    server
+        .at("/remove_admin/:user")
+        .post(routes::admins::remove_admin::route);
+    server
+        .at("/is_moderator/:user")
+        .get(routes::admins::is_moderator::route);
+    server
+        .at("/add_moderator/:user")
+        .post(routes::admins::add_moderator::route);
+    server
+        .at("/remove_moderator/:user")
+        .post(routes::admins::remove_moderator::route);
 }
