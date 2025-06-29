@@ -1,5 +1,31 @@
+use std::sync::Arc;
+
+use crate::{
+    admins::AdminStorage,
+    identity::IdentityService,
+    verify::nonce::{InMemoryNonceManager, NonceManager},
+};
+
+pub mod admin;
 pub mod forget;
 pub mod idt;
 pub mod proof;
 pub mod punish;
 pub mod vouch;
+
+#[derive(Clone)]
+pub struct State {
+    pub identity_service: IdentityService,
+    pub admin_storage: Arc<AdminStorage>,
+    pub nonce_manager: Arc<dyn NonceManager>,
+}
+
+impl Default for State {
+    fn default() -> Self {
+        Self {
+            identity_service: IdentityService::default(),
+            admin_storage: Arc::new(AdminStorage::default()),
+            nonce_manager: Arc::new(InMemoryNonceManager::default()),
+        }
+    }
+}

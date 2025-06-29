@@ -7,6 +7,7 @@ use crate::identity::UserAddress;
 pub trait NonceManager: Send + Sync {
     fn use_nonce(&self, user: &UserAddress, nonce: u64) -> bool;
     fn next_nonce(&self, user: &UserAddress) -> u64;
+    fn nonce(&self, user: &UserAddress) -> u64;
 }
 
 #[derive(Default)]
@@ -28,6 +29,11 @@ impl NonceManager for InMemoryNonceManager {
         // Otherwise, mark as used
         *last_nonce = nonce;
         true
+    }
+
+    fn nonce(&self, user: &UserAddress) -> u64 {
+        let next_nonces_lock = self.next_nonces.lock().expect("Should acquire lock");
+        next_nonces_lock.get(user).copied().unwrap_or_default()
     }
 
     fn next_nonce(&self, user: &UserAddress) -> u64 {

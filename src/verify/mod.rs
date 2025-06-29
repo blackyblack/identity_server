@@ -3,6 +3,7 @@ use ethers_signers::{LocalWallet, Signer};
 
 use crate::{identity::UserAddress, verify::error::Error};
 
+pub mod admin;
 pub mod error;
 pub mod forget;
 pub mod nonce;

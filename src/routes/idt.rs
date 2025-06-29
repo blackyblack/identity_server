@@ -3,11 +3,11 @@ use std::collections::HashMap;
 use serde_json::json;
 use tide::{Request, Response, http::mime};
 
-use crate::identity::{IdentityService, idt::balance};
+use crate::{identity::idt::balance, routes::State};
 
-pub async fn route(req: Request<IdentityService>) -> tide::Result {
+pub async fn route(req: Request<State>) -> tide::Result {
     let user = req.param("user")?;
-    let balance = balance(req.state(), &user.to_string()).await;
+    let balance = balance(&req.state().identity_service, &user.to_string()).await;
     let response: HashMap<String, serde_json::Value> = HashMap::from([
         ("user".into(), user.into()),
         ("idt".into(), balance.to_string().into()),
@@ -31,10 +31,10 @@ mod tests {
 
     #[async_std::test]
     async fn test_basic() {
-        let service = IdentityService::default();
+        let state = State::default();
 
         let _ = prove(
-            &service,
+            &state.identity_service,
             USER_A.to_string(),
             MODERATOR.to_string(),
             100,
@@ -46,7 +46,7 @@ mod tests {
             tide::http::Method::Get,
             Url::parse(&format!("http://example.com{}", req_url)).unwrap(),
         );
-        let mut server = tide::with_state(service);
+        let mut server = tide::with_state(state);
         server.at("/idt/:user").get(route);
 
         let mut response: Response = server.respond(req).await.unwrap();
@@ -58,13 +58,13 @@ mod tests {
 
     #[async_std::test]
     async fn test_bad_route() {
-        let service = IdentityService::default();
+        let state = State::default();
         let req_url = format!("/idt");
         let req = HttpRequest::new(
             tide::http::Method::Get,
             Url::parse(&format!("http://example.com{}", req_url)).unwrap(),
         );
-        let mut server = tide::with_state(service);
+        let mut server = tide::with_state(state);
         server.at("/idt/:user").get(route);
 
         let response: Response = server.respond(req).await.unwrap();

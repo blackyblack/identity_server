@@ -113,7 +113,8 @@ mod tests {
             .expect("Should generate signature");
         assert!(punish_verify(&signature, user.clone(), amount, proof_id, &nonce_manager).is_ok());
         // duplicate verification with the same nonce should fail
-        assert!(punish_verify(&signature, user, amount, proof_id, &nonce_manager).is_err());
+        let err = punish_verify(&signature, user, amount, proof_id, &nonce_manager).unwrap_err();
+        assert!(matches!(err, Error::NonceUsedError(_)));
     }
 
     #[async_std::test]

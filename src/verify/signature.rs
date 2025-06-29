@@ -11,18 +11,18 @@ use crate::{
 
 #[derive(Deserialize, Serialize, Clone)]
 pub struct Signature {
-    pub user: UserAddress,
+    pub signer: UserAddress,
     pub signature: String,
     pub nonce: u64,
 }
 
 impl Signature {
     pub async fn generate(private_key_hex: &str, message: &str, nonce: u64) -> Result<Self, Error> {
-        let user = private_key_to_address(private_key_hex)?;
+        let signer = private_key_to_address(private_key_hex)?;
         let wallet = private_key_to_wallet(private_key_hex)?;
         let eth_signature = wallet.sign_message(message).await?;
         Ok(Self {
-            user,
+            signer,
             signature: format!("0x{}", eth_signature),
             nonce,
         })
@@ -30,13 +30,13 @@ impl Signature {
 
     pub fn verify(&self, message: &str, nonce_manager: &dyn NonceManager) -> Result<(), Error> {
         let eth_signature = EthSignature::from_str(&self.signature)?;
-        let user_address = H160::from_str(&self.user).map_err(|e| {
-            Error::AddressParseError(format!("Failed to parse user address: {:?}", e))
+        let signer_address = H160::from_str(&self.signer).map_err(|e| {
+            Error::AddressParseError(format!("Failed to parse signer address: {:?}", e))
         })?;
         eth_signature
-            .verify(message, user_address)
+            .verify(message, signer_address)
             .map_err(Error::SignatureVerificationFailed)?;
-        if nonce_manager.use_nonce(&self.user, self.nonce) {
+        if nonce_manager.use_nonce(&self.signer, self.nonce) {
             return Ok(());
         }
         Err(Error::NonceUsedError(self.nonce))
@@ -102,7 +102,7 @@ mod tests {
                 .await
                 .expect("Should generate signature");
         // replace user address with wallet2's address
-        signature.user = user2;
+        signature.signer = user2;
         assert!(signature.verify(message, &nonce_manager).is_err());
     }
 

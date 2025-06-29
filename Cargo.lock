@@ -1652,6 +1652,7 @@ name = "identity_server"
 version = "0.0.1"
 dependencies = [
  "async-std",
+ "async-trait",
  "dotenv",
  "env_logger",
  "ethers-core",
