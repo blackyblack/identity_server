@@ -1,3 +1,5 @@
+use async_std::task;
+
 use crate::identity::{
     IdentityService, IdtAmount, ModeratorProof, ProofId, UserAddress, error::Error, next_timestamp,
 };
@@ -22,12 +24,12 @@ impl IdentityService {
             proof_id,
             timestamp,
         };
-        self.proofs.set_proof(user, event);
+        task::block_on(self.proofs.set_proof(user, event)).expect("storage error");
         Ok(())
     }
 
     pub fn proof(&self, user: &UserAddress) -> Option<ModeratorProof> {
-        self.proofs.proof(user)
+        task::block_on(self.proofs.proof(user)).expect("storage error")
     }
 }
 

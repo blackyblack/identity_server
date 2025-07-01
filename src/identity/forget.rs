@@ -1,5 +1,7 @@
 use std::collections::HashSet;
 
+use async_std::task;
+
 use crate::identity::{IdentityService, UserAddress, next_timestamp};
 
 impl IdentityService {
@@ -9,18 +11,19 @@ impl IdentityService {
         vouchee: UserAddress,
         timestamp: u64,
     ) {
-        self.vouches.remove_vouch(user.clone(), vouchee.clone());
+        task::block_on(self.vouches.remove_vouch(user.clone(), vouchee.clone()))
+            .expect("storage error");
         self.punish_for_forgetting_with_timestamp(user, vouchee, timestamp)
             .await;
     }
 
     pub fn forgotten_users(&self, user: &UserAddress) -> HashSet<UserAddress> {
-        self.penalties.forgotten_users(user)
+        task::block_on(self.penalties.forgotten_users(user)).expect("storage error")
     }
 
     // allows to clean up outdated penalties
     pub fn delete_forgotten(&self, user: UserAddress, forgotten: &UserAddress) {
-        self.penalties.remove_forgotten(user, forgotten);
+        task::block_on(self.penalties.remove_forgotten(user, forgotten)).expect("storage error");
     }
 }
 

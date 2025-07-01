@@ -1,18 +1,20 @@
 use std::collections::HashMap;
 
+use async_std::task;
+
 use crate::identity::{IdentityService, UserAddress, next_timestamp};
 
 impl IdentityService {
     pub fn vouch_with_timestamp(&self, from: UserAddress, to: UserAddress, timestamp: u64) {
-        self.vouches.vouch(from, to, timestamp);
+        task::block_on(self.vouches.vouch(from, to, timestamp)).expect("storage error");
     }
 
     pub fn vouchers_with_time(&self, user: &UserAddress) -> HashMap<UserAddress, u64> {
-        self.vouches.vouchers_with_time(user)
+        task::block_on(self.vouches.vouchers_with_time(user)).expect("storage error")
     }
 
     pub fn vouchees_with_time(&self, user: &UserAddress) -> HashMap<UserAddress, u64> {
-        self.vouches.vouchees_with_time(user)
+        task::block_on(self.vouches.vouchees_with_time(user)).expect("storage error")
     }
 }
 

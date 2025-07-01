@@ -1,5 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
+use async_std::task;
+
 use crate::identity::{
     IdentityService, IdtAmount, ModeratorProof, ProofId, SystemPenalty, UserAddress,
     decay::{balance_after_decay, moderator_penalty_decay, system_penalty_decay},
@@ -116,7 +118,8 @@ impl IdentityService {
             proof_id,
             timestamp,
         };
-        self.penalties.insert_moderator_penalty(user, event);
+        task::block_on(self.penalties.insert_moderator_penalty(user, event))
+            .expect("storage error");
     }
 
     pub async fn punish_for_forgetting_with_timestamp(
@@ -133,12 +136,15 @@ impl IdentityService {
             amount: FORGET_PENALTY + vouchee_penalty,
             timestamp,
         };
-        self.penalties
-            .insert_forgotten_penalty(user, vouchee, event);
+        task::block_on(
+            self.penalties
+                .insert_forgotten_penalty(user, vouchee, event),
+        )
+        .expect("storage error");
     }
 
     pub fn moderator_penalty(&self, user: &UserAddress) -> Option<ModeratorProof> {
-        self.penalties.moderator_penalty(user)
+        task::block_on(self.penalties.moderator_penalty(user)).expect("storage error")
     }
 
     pub fn forgotten_penalty(
@@ -146,7 +152,7 @@ impl IdentityService {
         user: &UserAddress,
         forgotten: &UserAddress,
     ) -> Option<SystemPenalty> {
-        self.penalties.forgotten_penalty(user, forgotten)
+        task::block_on(self.penalties.forgotten_penalty(user, forgotten)).expect("storage error")
     }
 }
 
