@@ -3,13 +3,13 @@ use crate::{
     verify::{error::Error, nonce::NonceManager, private_key_to_address, signature::Signature},
 };
 
-pub fn admin_verify(
+pub async fn admin_verify(
     signature: &Signature,
     recipient: UserAddress,
     nonce_manager: &dyn NonceManager,
 ) -> Result<(), Error> {
     let message = admin_signature_message(recipient, signature.nonce);
-    signature.verify(&message, nonce_manager)
+    signature.verify(&message, nonce_manager).await
 }
 
 pub async fn admin_sign(
@@ -18,7 +18,7 @@ pub async fn admin_sign(
     nonce_manager: &dyn NonceManager,
 ) -> Result<Signature, Error> {
     let sender = private_key_to_address(private_key_hex)?;
-    let nonce = nonce_manager.next_nonce(&sender);
+    let nonce = nonce_manager.next_nonce(&sender).await?;
     let message = admin_signature_message(recipient, nonce);
     Signature::generate(private_key_hex, &message, nonce).await
 }
@@ -41,7 +41,7 @@ mod tests {
         let signature = admin_sign(&private_key, user.clone(), &nonce_manager)
             .await
             .expect("Should generate signature");
-        assert!(admin_verify(&signature, user, &nonce_manager).is_ok());
+        assert!(admin_verify(&signature, user, &nonce_manager).await.is_ok());
     }
 
     #[async_std::test]
@@ -52,7 +52,11 @@ mod tests {
         let signature = admin_sign(&private_key, user.clone(), &nonce_manager)
             .await
             .expect("Should generate signature");
-        assert!(admin_verify(&signature, "bad user".to_string(), &nonce_manager).is_err());
+        assert!(
+            admin_verify(&signature, "bad user".to_string(), &nonce_manager)
+                .await
+                .is_err()
+        );
     }
 
     #[async_std::test]
@@ -68,7 +72,11 @@ mod tests {
             nonce: bad_nonce,
             ..signature
         };
-        assert!(admin_verify(&signature, user, &nonce_manager).is_err());
+        assert!(
+            admin_verify(&signature, user, &nonce_manager)
+                .await
+                .is_err()
+        );
     }
 
     #[async_std::test]
@@ -79,9 +87,15 @@ mod tests {
         let signature = admin_sign(&private_key, user.clone(), &nonce_manager)
             .await
             .expect("Should generate signature");
-        assert!(admin_verify(&signature, user.clone(), &nonce_manager).is_ok());
+        assert!(
+            admin_verify(&signature, user.clone(), &nonce_manager)
+                .await
+                .is_ok()
+        );
         // duplicate verification with the same nonce should fail
-        let err = admin_verify(&signature, user, &nonce_manager).unwrap_err();
+        let err = admin_verify(&signature, user, &nonce_manager)
+            .await
+            .unwrap_err();
         assert!(matches!(err, Error::NonceUsedError(_)));
     }
 }

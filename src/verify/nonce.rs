@@ -1,13 +1,17 @@
 use std::collections::HashMap;
 use std::sync::Mutex;
 
+use async_trait::async_trait;
+
 use crate::identity::UserAddress;
+use crate::verify::error::Error;
 
 // Manages signature nonces to prevent replay attacks
+#[async_trait]
 pub trait NonceManager: Send + Sync {
-    fn use_nonce(&self, user: &UserAddress, nonce: u64) -> bool;
-    fn next_nonce(&self, user: &UserAddress) -> u64;
-    fn nonce(&self, user: &UserAddress) -> u64;
+    async fn use_nonce(&self, user: &UserAddress, nonce: u64) -> Result<(), Error>;
+    async fn next_nonce(&self, user: &UserAddress) -> Result<u64, Error>;
+    async fn nonce(&self, user: &UserAddress) -> Result<u64, Error>;
 }
 
 #[derive(Default)]
@@ -16,30 +20,31 @@ pub struct InMemoryNonceManager {
     next_nonces: Mutex<HashMap<UserAddress, u64>>,
 }
 
+#[async_trait]
 impl NonceManager for InMemoryNonceManager {
-    fn use_nonce(&self, user: &UserAddress, nonce: u64) -> bool {
+    async fn use_nonce(&self, user: &UserAddress, nonce: u64) -> Result<(), Error> {
         let mut used_nonce_lock = self.used_nonce.lock().expect("Should acquire lock");
         let last_nonce = used_nonce_lock.entry(user.clone()).or_default();
 
         // if nonce is already used
         if *last_nonce >= nonce {
-            return false;
+            return Err(Error::NonceUsedError(nonce));
         }
 
         // Otherwise, mark as used
         *last_nonce = nonce;
-        true
+        Ok(())
     }
 
-    fn nonce(&self, user: &UserAddress) -> u64 {
+    async fn nonce(&self, user: &UserAddress) -> Result<u64, Error> {
         let next_nonces_lock = self.next_nonces.lock().expect("Should acquire lock");
-        next_nonces_lock.get(user).copied().unwrap_or_default()
+        Ok(next_nonces_lock.get(user).copied().unwrap_or_default())
     }
 
-    fn next_nonce(&self, user: &UserAddress) -> u64 {
+    async fn next_nonce(&self, user: &UserAddress) -> Result<u64, Error> {
         let mut next_nonces_lock = self.next_nonces.lock().expect("Should acquire lock");
         let next_nonce = next_nonces_lock.entry(user.clone()).or_insert(0);
         *next_nonce += 1;
-        *next_nonce
+        Ok(*next_nonce)
     }
 }

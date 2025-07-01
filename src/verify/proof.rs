@@ -11,12 +11,12 @@ pub async fn proof_sign(
     nonce_manager: &dyn NonceManager,
 ) -> Result<Signature, Error> {
     let moderator = private_key_to_address(private_key_hex)?;
-    let nonce = nonce_manager.next_nonce(&moderator);
+    let nonce = nonce_manager.next_nonce(&moderator).await?;
     let message = proof_signature_message(user, nonce, amount, proof_id);
     Signature::generate(private_key_hex, &message, nonce).await
 }
 
-pub fn proof_verify(
+pub async fn proof_verify(
     signature: &Signature,
     user: UserAddress,
     amount: IdtAmount,
@@ -24,7 +24,7 @@ pub fn proof_verify(
     nonce_manager: &dyn NonceManager,
 ) -> Result<(), Error> {
     let message = proof_signature_message(user.clone(), signature.nonce, amount, proof_id);
-    signature.verify(&message, nonce_manager)
+    signature.verify(&message, nonce_manager).await
 }
 
 fn proof_signature_message(
@@ -52,7 +52,11 @@ mod tests {
         let signature = proof_sign(&private_key, user.clone(), amount, proof_id, &nonce_manager)
             .await
             .expect("Should generate signature");
-        assert!(proof_verify(&signature, user, amount, proof_id, &nonce_manager).is_ok());
+        assert!(
+            proof_verify(&signature, user, amount, proof_id, &nonce_manager)
+                .await
+                .is_ok()
+        );
     }
 
     #[async_std::test]
@@ -66,7 +70,11 @@ mod tests {
             .await
             .expect("Should generate signature");
         let bad_user = "bad user".to_string();
-        assert!(proof_verify(&signature, bad_user, amount, proof_id, &nonce_manager).is_err());
+        assert!(
+            proof_verify(&signature, bad_user, amount, proof_id, &nonce_manager)
+                .await
+                .is_err()
+        );
     }
 
     #[async_std::test]
@@ -80,7 +88,11 @@ mod tests {
             .await
             .expect("Should generate signature");
         let bad_amount = 200;
-        assert!(proof_verify(&signature, user, bad_amount, proof_id, &nonce_manager).is_err());
+        assert!(
+            proof_verify(&signature, user, bad_amount, proof_id, &nonce_manager)
+                .await
+                .is_err()
+        );
     }
 
     #[async_std::test]
@@ -98,7 +110,11 @@ mod tests {
             nonce: bad_nonce,
             ..signature
         };
-        assert!(proof_verify(&signature, user, amount, proof_id, &nonce_manager).is_err());
+        assert!(
+            proof_verify(&signature, user, amount, proof_id, &nonce_manager)
+                .await
+                .is_err()
+        );
     }
 
     #[async_std::test]
@@ -111,9 +127,15 @@ mod tests {
         let signature = proof_sign(&private_key, user.clone(), amount, proof_id, &nonce_manager)
             .await
             .expect("Should generate signature");
-        assert!(proof_verify(&signature, user.clone(), amount, proof_id, &nonce_manager).is_ok());
+        assert!(
+            proof_verify(&signature, user.clone(), amount, proof_id, &nonce_manager)
+                .await
+                .is_ok()
+        );
         // duplicate verification with the same nonce should fail
-        let err = proof_verify(&signature, user, amount, proof_id, &nonce_manager).unwrap_err();
+        let err = proof_verify(&signature, user, amount, proof_id, &nonce_manager)
+            .await
+            .unwrap_err();
         assert!(matches!(err, Error::NonceUsedError(_)));
     }
 
@@ -128,6 +150,10 @@ mod tests {
             .await
             .expect("Should generate signature");
         let bad_proof_id = 6060;
-        assert!(proof_verify(&signature, user, amount, bad_proof_id, &nonce_manager).is_err());
+        assert!(
+            proof_verify(&signature, user, amount, bad_proof_id, &nonce_manager)
+                .await
+                .is_err()
+        );
     }
 }

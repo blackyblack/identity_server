@@ -6,7 +6,7 @@ use std::{
 };
 
 use identity_server::{
-    admins::AdminStorage,
+    admins::InMemoryAdminStorage,
     identity::IdentityService,
     routes::{self, State},
     verify::nonce::InMemoryNonceManager,
@@ -31,11 +31,9 @@ async fn main() -> Result<(), Error> {
         .init();
     let admins = HashSet::new();
     let moderators = HashSet::new();
-    let identity_service = IdentityService::default();
-    let admin_storage = Arc::new(AdminStorage::new(admins, moderators));
     let state = State {
-        identity_service,
-        admin_storage,
+        identity_service: IdentityService::default(),
+        admin_storage: Arc::new(InMemoryAdminStorage::new(admins, moderators)),
         nonce_manager: Arc::new(InMemoryNonceManager::default()),
     };
     log::info!("Starting identity server");

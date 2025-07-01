@@ -25,13 +25,19 @@ pub async fn route(mut req: Request<State>) -> tide::Result {
     let moderator = body.from;
     let amount = body.amount;
     let proof_id = body.proof_id;
-    if !req.state().admin_storage.is_moderator(&moderator) {
+    if req
+        .state()
+        .admin_storage
+        .is_moderator(&moderator)
+        .await
+        .is_err()
+    {
         return Ok(Response::builder(403)
             .body(json!({"error": "not moderator"}))
             .content_type(mime::JSON)
             .build());
     }
-    let current_nonce = req.state().nonce_manager.nonce(&moderator);
+    let current_nonce = req.state().nonce_manager.nonce(&moderator).await?;
     {
         let signature = Signature {
             signer: moderator.clone(),
@@ -45,6 +51,7 @@ pub async fn route(mut req: Request<State>) -> tide::Result {
             proof_id,
             &*req.state().nonce_manager,
         )
+        .await
         .is_err()
         {
             return Ok(Response::builder(400)
@@ -95,7 +102,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        admins::AdminStorage,
+        admins::InMemoryAdminStorage,
         identity::{
             IdentityService,
             proof::MAX_IDT_BY_PROOF,
@@ -110,7 +117,7 @@ mod tests {
     async fn test_basic_proof() {
         let (private_key, moderator) = random_keypair();
         let moderators = HashSet::from([moderator.clone()]);
-        let admin_storage = Arc::new(AdminStorage::new(HashSet::new(), moderators));
+        let admin_storage = Arc::new(InMemoryAdminStorage::new(HashSet::new(), moderators));
         let state = State {
             identity_service: IdentityService::default(),
             admin_storage,
@@ -162,7 +169,7 @@ mod tests {
     async fn test_exceeded_max_balance() {
         let (private_key, moderator) = random_keypair();
         let moderators = HashSet::from([moderator.clone()]);
-        let admin_storage = Arc::new(AdminStorage::new(HashSet::new(), moderators));
+        let admin_storage = Arc::new(InMemoryAdminStorage::new(HashSet::new(), moderators));
         let state = State {
             identity_service: IdentityService::default(),
             admin_storage,
@@ -249,7 +256,7 @@ mod tests {
         let (private_key, _) = random_keypair();
 
         let moderators = HashSet::from(["other_moderator".to_string()]);
-        let admin_storage = Arc::new(AdminStorage::new(HashSet::new(), moderators));
+        let admin_storage = Arc::new(InMemoryAdminStorage::new(HashSet::new(), moderators));
 
         let state = State {
             identity_service: IdentityService::default(),

@@ -22,14 +22,14 @@ pub async fn route(mut req: Request<State>) -> tide::Result {
     let body: AdminRequest = req.body_json().await?;
     let sender = body.from.clone();
 
-    if !req.state().admin_storage.is_admin(&sender) {
+    if req.state().admin_storage.is_admin(&sender).await.is_err() {
         return Ok(Response::builder(403)
             .body(json!({"error": "not admin"}))
             .content_type(mime::JSON)
             .build());
     }
 
-    let current_nonce = req.state().nonce_manager.nonce(&sender);
+    let current_nonce = req.state().nonce_manager.nonce(&sender).await?;
 
     {
         let signature = Signature {
@@ -37,7 +37,10 @@ pub async fn route(mut req: Request<State>) -> tide::Result {
             signature: body.signature,
             nonce: body.nonce,
         };
-        if admin_verify(&signature, recipient.clone(), &*req.state().nonce_manager).is_err() {
+        if admin_verify(&signature, recipient.clone(), &*req.state().nonce_manager)
+            .await
+            .is_err()
+        {
             return Ok(Response::builder(400)
                 .body(json!({"error": "signature verification failed"}))
                 .content_type(mime::JSON)
@@ -49,6 +52,7 @@ pub async fn route(mut req: Request<State>) -> tide::Result {
         .state()
         .admin_storage
         .remove_admin(&sender, recipient.clone())
+        .await
         .is_err()
     {
         return Ok(Response::builder(400)
@@ -76,7 +80,7 @@ mod tests {
     use std::{collections::HashSet, sync::Arc};
 
     use crate::{
-        admins::AdminStorage,
+        admins::{AdminStorage, InMemoryAdminStorage},
         identity::IdentityService,
         verify::{admin::admin_sign, nonce::InMemoryNonceManager, random_keypair},
     };
@@ -90,7 +94,7 @@ mod tests {
         let (private_key, admin_address) = random_keypair();
         let other_admin = "other_admin".to_string();
         let admins = HashSet::from([admin_address.clone(), other_admin.clone()]);
-        let admin_storage = Arc::new(AdminStorage::new(admins, HashSet::new()));
+        let admin_storage = Arc::new(InMemoryAdminStorage::new(admins, HashSet::new()));
         let state = State {
             identity_service: IdentityService::default(),
             admin_storage: admin_storage.clone(),
@@ -129,14 +133,14 @@ mod tests {
         assert_eq!(body["nonce"], signature.nonce);
 
         // verify the old admin was removed
-        assert!(!admin_storage.is_admin(&other_admin));
+        assert!(admin_storage.is_admin(&other_admin).await.is_err());
     }
 
     #[async_std::test]
     async fn test_no_privilege() {
         let (private_key, _) = random_keypair();
         let admins = HashSet::from(["other_admin".to_string()]);
-        let admin_storage = Arc::new(AdminStorage::new(admins, HashSet::new()));
+        let admin_storage = Arc::new(InMemoryAdminStorage::new(admins, HashSet::new()));
         let state = State {
             identity_service: IdentityService::default(),
             admin_storage,

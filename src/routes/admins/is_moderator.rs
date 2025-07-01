@@ -7,7 +7,7 @@ use crate::routes::State;
 
 pub async fn route(req: Request<State>) -> tide::Result {
     let user = req.param("user")?.to_string();
-    let is_moderator = req.state().admin_storage.is_moderator(&user);
+    let is_moderator = req.state().admin_storage.is_moderator(&user).await.is_ok();
     let response: HashMap<String, serde_json::Value> = HashMap::from([
         ("user".into(), user.into()),
         ("is_moderator".into(), is_moderator.into()),
@@ -24,7 +24,8 @@ mod tests {
     use std::{collections::HashSet, sync::Arc};
 
     use crate::{
-        admins::AdminStorage, identity::IdentityService, verify::nonce::InMemoryNonceManager,
+        admins::InMemoryAdminStorage, identity::IdentityService,
+        verify::nonce::InMemoryNonceManager,
     };
 
     use super::*;
@@ -35,7 +36,7 @@ mod tests {
     async fn test_basic() {
         let moderator = "moderator_user".to_string();
         let moderators = HashSet::from([moderator.clone()]);
-        let admin_storage = Arc::new(AdminStorage::new(HashSet::new(), moderators));
+        let admin_storage = Arc::new(InMemoryAdminStorage::new(HashSet::new(), moderators));
         let state = State {
             identity_service: IdentityService::default(),
             admin_storage,

@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::{
-    admins::AdminStorage,
+    admins::{AdminStorage, InMemoryAdminStorage},
     identity::IdentityService,
     verify::nonce::{InMemoryNonceManager, NonceManager},
 };
@@ -16,7 +16,7 @@ pub mod vouch;
 #[derive(Clone)]
 pub struct State {
     pub identity_service: IdentityService,
-    pub admin_storage: Arc<AdminStorage>,
+    pub admin_storage: Arc<dyn AdminStorage>,
     pub nonce_manager: Arc<dyn NonceManager>,
 }
 
@@ -24,7 +24,7 @@ impl Default for State {
     fn default() -> Self {
         Self {
             identity_service: IdentityService::default(),
-            admin_storage: Arc::new(AdminStorage::default()),
+            admin_storage: Arc::new(InMemoryAdminStorage::default()),
             nonce_manager: Arc::new(InMemoryNonceManager::default()),
         }
     }

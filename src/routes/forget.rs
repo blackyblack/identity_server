@@ -21,7 +21,7 @@ pub async fn route(mut req: Request<State>) -> tide::Result {
     let vouchee = req.param("user")?.to_string();
     let body: ForgetRequest = req.body_json().await?;
     let voucher = body.from;
-    let current_nonce = req.state().nonce_manager.nonce(&voucher);
+    let current_nonce = req.state().nonce_manager.nonce(&voucher).await?;
 
     {
         let signature = Signature {
@@ -29,7 +29,10 @@ pub async fn route(mut req: Request<State>) -> tide::Result {
             signature: body.signature,
             nonce: body.nonce,
         };
-        if forget_verify(&signature, vouchee.clone(), &*req.state().nonce_manager).is_err() {
+        if forget_verify(&signature, vouchee.clone(), &*req.state().nonce_manager)
+            .await
+            .is_err()
+        {
             return Ok(Response::builder(400)
                 .body(json!({"error": "signature verification failed"}))
                 .content_type(mime::JSON)
