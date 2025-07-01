@@ -1,7 +1,9 @@
-use std::{
-    collections::HashMap,
-    sync::{Arc, RwLock},
-    time::SystemTime,
+use std::sync::Arc;
+use std::time::SystemTime;
+
+use storage::{
+    InMemoryPenaltyStorage, InMemoryProofStorage, InMemoryVouchStorage, PenaltyStorage,
+    ProofStorage, VouchStorage,
 };
 
 mod decay;
@@ -10,22 +12,13 @@ pub mod forget;
 pub mod idt;
 pub mod proof;
 pub mod punish;
+pub mod storage;
 mod tree_walk;
 pub mod vouch;
 
 pub type UserAddress = String;
 pub type ProofId = u128;
 pub type IdtAmount = u128;
-
-#[derive(Default)]
-struct VouchStorage {
-    // key - vouchee, vouch object
-    // value - (voucher, unix timestamp) map
-    vouchers: HashMap<UserAddress, HashMap<UserAddress, u64>>,
-    // key - voucher, vouch subject
-    // value - (vouchee, unix timestamp) map
-    vouchees: HashMap<UserAddress, HashMap<UserAddress, u64>>,
-}
 
 #[derive(Clone)]
 pub struct ModeratorProof {
@@ -35,11 +28,6 @@ pub struct ModeratorProof {
     pub timestamp: u64,
 }
 
-// key - proven user
-// only single proof for a user is allowed. If proof should be updated,
-// moderator should prove again and update proof manually.
-type ProofStorage = HashMap<UserAddress, ModeratorProof>;
-
 // system can generate own penalties, so proof_id and moderator are not required
 #[derive(Clone, Default)]
 pub struct SystemPenalty {
@@ -47,21 +35,35 @@ pub struct SystemPenalty {
     pub timestamp: u64,
 }
 
-// key - punished user
-#[derive(Default)]
-struct PenaltyStorage {
-    // only single ban for a user is allowed. If penalty should be increased,
-    // moderator should ban again and increase penalty manually.
-    moderator_penalty: HashMap<UserAddress, ModeratorProof>,
-    // inside map key - forgotten user
-    forget_penalties: HashMap<UserAddress, HashMap<UserAddress, SystemPenalty>>,
+#[derive(Clone)]
+pub struct IdentityService {
+    vouches: Arc<dyn VouchStorage>,
+    proofs: Arc<dyn ProofStorage>,
+    penalties: Arc<dyn PenaltyStorage>,
 }
 
-#[derive(Clone, Default)]
-pub struct IdentityService {
-    vouches: Arc<RwLock<VouchStorage>>,
-    proofs: Arc<RwLock<ProofStorage>>,
-    penalties: Arc<RwLock<PenaltyStorage>>,
+impl IdentityService {
+    pub fn new(
+        vouches: Arc<dyn VouchStorage>,
+        proofs: Arc<dyn ProofStorage>,
+        penalties: Arc<dyn PenaltyStorage>,
+    ) -> Self {
+        Self {
+            vouches,
+            proofs,
+            penalties,
+        }
+    }
+}
+
+impl Default for IdentityService {
+    fn default() -> Self {
+        Self::new(
+            Arc::new(InMemoryVouchStorage::default()),
+            Arc::new(InMemoryProofStorage::default()),
+            Arc::new(InMemoryPenaltyStorage::default()),
+        )
+    }
 }
 
 pub fn next_timestamp() -> u64 {

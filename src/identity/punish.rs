@@ -116,11 +116,7 @@ impl IdentityService {
             proof_id,
             timestamp,
         };
-        self.penalties
-            .write()
-            .expect("Poisoned RwLock detected")
-            .moderator_penalty
-            .insert(user, event);
+        self.penalties.insert_moderator_penalty(user, event);
     }
 
     pub async fn punish_for_forgetting_with_timestamp(
@@ -138,23 +134,11 @@ impl IdentityService {
             timestamp,
         };
         self.penalties
-            .write()
-            .expect("Poisoned RwLock detected")
-            .forget_penalties
-            .entry(user)
-            .and_modify(|v| {
-                v.insert(vouchee.clone(), event.clone());
-            })
-            .or_insert_with(move || HashMap::from([(vouchee, event)]));
+            .insert_forgotten_penalty(user, vouchee, event);
     }
 
     pub fn moderator_penalty(&self, user: &UserAddress) -> Option<ModeratorProof> {
-        self.penalties
-            .read()
-            .expect("Poisoned RwLock detected")
-            .moderator_penalty
-            .get(user)
-            .cloned()
+        self.penalties.moderator_penalty(user)
     }
 
     pub fn forgotten_penalty(
@@ -162,12 +146,7 @@ impl IdentityService {
         user: &UserAddress,
         forgotten: &UserAddress,
     ) -> Option<SystemPenalty> {
-        self.penalties
-            .read()
-            .expect("Poisoned RwLock detected")
-            .forget_penalties
-            .get(user)
-            .and_then(|v| v.get(forgotten).cloned())
+        self.penalties.forgotten_penalty(user, forgotten)
     }
 }
 

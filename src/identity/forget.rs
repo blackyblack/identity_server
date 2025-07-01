@@ -9,44 +9,18 @@ impl IdentityService {
         vouchee: UserAddress,
         timestamp: u64,
     ) {
-        {
-            let mut vouches_lock = self.vouches.write().expect("Poisoned RwLock detected");
-            vouches_lock
-                .vouchers
-                .entry(vouchee.clone())
-                .and_modify(|v| {
-                    v.remove(&user);
-                });
-            vouches_lock.vouchees.entry(user.clone()).and_modify(|v| {
-                v.remove(&vouchee);
-            });
-        }
+        self.vouches.remove_vouch(user.clone(), vouchee.clone());
         self.punish_for_forgetting_with_timestamp(user, vouchee, timestamp)
             .await;
     }
 
     pub fn forgotten_users(&self, user: &UserAddress) -> HashSet<UserAddress> {
-        self.penalties
-            .read()
-            .expect("Poisoned RwLock detected")
-            .forget_penalties
-            .get(user)
-            .cloned()
-            .unwrap_or_default()
-            .into_keys()
-            .collect()
+        self.penalties.forgotten_users(user)
     }
 
     // allows to clean up outdated penalties
     pub fn delete_forgotten(&self, user: UserAddress, forgotten: &UserAddress) {
-        self.penalties
-            .write()
-            .expect("Poisoned RwLock detected")
-            .forget_penalties
-            .entry(user)
-            .and_modify(|v| {
-                v.remove(forgotten);
-            });
+        self.penalties.remove_forgotten(user, forgotten);
     }
 }
 

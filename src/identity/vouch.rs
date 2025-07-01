@@ -4,49 +4,15 @@ use crate::identity::{IdentityService, UserAddress, next_timestamp};
 
 impl IdentityService {
     pub fn vouch_with_timestamp(&self, from: UserAddress, to: UserAddress, timestamp: u64) {
-        let mut vouches_lock = self.vouches.write().expect("Poisoned RwLock detected");
-        vouches_lock
-            .vouchers
-            .entry(to.clone())
-            .and_modify(|v| {
-                v.insert(from.clone(), timestamp);
-            })
-            .or_insert_with(|| {
-                let mut m = HashMap::new();
-                m.insert(from.clone(), timestamp);
-                m
-            });
-        vouches_lock
-            .vouchees
-            .entry(from)
-            .and_modify(|v| {
-                v.insert(to.clone(), timestamp);
-            })
-            .or_insert_with(|| {
-                let mut m = HashMap::new();
-                m.insert(to, timestamp);
-                m
-            });
+        self.vouches.vouch(from, to, timestamp);
     }
 
     pub fn vouchers_with_time(&self, user: &UserAddress) -> HashMap<UserAddress, u64> {
-        self.vouches
-            .read()
-            .expect("Poisoned RwLock detected")
-            .vouchers
-            .get(user)
-            .cloned()
-            .unwrap_or_default()
+        self.vouches.vouchers_with_time(user)
     }
 
     pub fn vouchees_with_time(&self, user: &UserAddress) -> HashMap<UserAddress, u64> {
-        self.vouches
-            .read()
-            .expect("Poisoned RwLock detected")
-            .vouchees
-            .get(user)
-            .cloned()
-            .unwrap_or_default()
+        self.vouches.vouchees_with_time(user)
     }
 }
 

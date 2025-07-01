@@ -22,19 +22,12 @@ impl IdentityService {
             proof_id,
             timestamp,
         };
-        self.proofs
-            .write()
-            .expect("Poisoned RwLock detected")
-            .insert(user, event);
+        self.proofs.set_proof(user, event);
         Ok(())
     }
 
     pub fn proof(&self, user: &UserAddress) -> Option<ModeratorProof> {
-        self.proofs
-            .read()
-            .expect("Poisoned RwLock detected")
-            .get(user)
-            .cloned()
+        self.proofs.proof(user)
     }
 }
 
