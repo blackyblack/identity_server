@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::identity::{IdentityService, UserAddress, next_timestamp};
+use crate::identity::{IdentityService, UserAddress, error::Error, next_timestamp};
 
 impl IdentityService {
     pub async fn forget_with_timestamp(
@@ -8,49 +8,33 @@ impl IdentityService {
         user: UserAddress,
         vouchee: UserAddress,
         timestamp: u64,
-    ) {
-        {
-            let mut vouches_lock = self.vouches.write().expect("Poisoned RwLock detected");
-            vouches_lock
-                .vouchers
-                .entry(vouchee.clone())
-                .and_modify(|v| {
-                    v.remove(&user);
-                });
-            vouches_lock.vouchees.entry(user.clone()).and_modify(|v| {
-                v.remove(&vouchee);
-            });
-        }
+    ) -> Result<(), Error> {
+        self.vouches
+            .remove_vouch(user.clone(), vouchee.clone())
+            .await?;
         self.punish_for_forgetting_with_timestamp(user, vouchee, timestamp)
-            .await;
+            .await
     }
 
-    pub fn forgotten_users(&self, user: &UserAddress) -> HashSet<UserAddress> {
-        self.penalties
-            .read()
-            .expect("Poisoned RwLock detected")
-            .forget_penalties
-            .get(user)
-            .cloned()
-            .unwrap_or_default()
-            .into_keys()
-            .collect()
+    pub async fn forgotten_users(&self, user: &UserAddress) -> Result<HashSet<UserAddress>, Error> {
+        self.penalties.forgotten_users(user).await
     }
 
     // allows to clean up outdated penalties
-    pub fn delete_forgotten(&self, user: UserAddress, forgotten: &UserAddress) {
-        self.penalties
-            .write()
-            .expect("Poisoned RwLock detected")
-            .forget_penalties
-            .entry(user)
-            .and_modify(|v| {
-                v.remove(forgotten);
-            });
+    pub async fn delete_forgotten(
+        &self,
+        user: UserAddress,
+        forgotten: &UserAddress,
+    ) -> Result<(), Error> {
+        self.penalties.remove_forgotten(user, forgotten).await
     }
 }
 
-pub async fn forget(service: &IdentityService, user: UserAddress, vouchee: UserAddress) {
+pub async fn forget(
+    service: &IdentityService,
+    user: UserAddress,
+    vouchee: UserAddress,
+) -> Result<(), Error> {
     service
         .forget_with_timestamp(user, vouchee, next_timestamp())
         .await
@@ -78,14 +62,19 @@ mod tests {
             MODERATOR.to_string(),
             10000,
             PROOF_ID,
-        );
-        vouch(&service, USER_A.to_string(), user_b.to_string());
-        assert_eq!(balance(&service, &USER_A.to_string()).await, 10000);
-        assert_eq!(balance(&service, &user_b.to_string()).await, 1000);
-        forget(&service, USER_A.to_string(), user_b.to_string()).await;
-        assert_eq!(balance(&service, &USER_A.to_string()).await, 9500);
-        assert_eq!(balance(&service, &user_b.to_string()).await, 0);
-        assert_eq!(penalty(&service, &USER_A.to_string()).await, 500);
+        )
+        .await;
+        vouch(&service, USER_A.to_string(), user_b.to_string())
+            .await
+            .unwrap();
+        assert_eq!(balance(&service, &USER_A.to_string()).await.unwrap(), 10000);
+        assert_eq!(balance(&service, &user_b.to_string()).await.unwrap(), 1000);
+        forget(&service, USER_A.to_string(), user_b.to_string())
+            .await
+            .unwrap();
+        assert_eq!(balance(&service, &USER_A.to_string()).await.unwrap(), 9500);
+        assert_eq!(balance(&service, &user_b.to_string()).await.unwrap(), 0);
+        assert_eq!(penalty(&service, &USER_A.to_string()).await.unwrap(), 500);
     }
 
     #[async_std::test]
@@ -98,23 +87,30 @@ mod tests {
             MODERATOR.to_string(),
             10000,
             PROOF_ID,
-        );
-        vouch(&service, USER_A.to_string(), user_b.to_string());
-        assert_eq!(balance(&service, &USER_A.to_string()).await, 10000);
-        assert_eq!(balance(&service, &user_b.to_string()).await, 1000);
+        )
+        .await;
+        vouch(&service, USER_A.to_string(), user_b.to_string())
+            .await
+            .unwrap();
+        assert_eq!(balance(&service, &USER_A.to_string()).await.unwrap(), 10000);
+        assert_eq!(balance(&service, &user_b.to_string()).await.unwrap(), 1000);
         punish(
             &service,
             user_b.to_string(),
             MODERATOR.to_string(),
             500,
             PROOF_ID,
-        );
-        assert_eq!(balance(&service, &USER_A.to_string()).await, 9950);
-        assert_eq!(balance(&service, &user_b.to_string()).await, 495);
-        forget(&service, USER_A.to_string(), user_b.to_string()).await;
-        assert_eq!(balance(&service, &USER_A.to_string()).await, 9450);
-        assert_eq!(balance(&service, &user_b.to_string()).await, 0);
-        assert_eq!(penalty(&service, &USER_A.to_string()).await, 550);
+        )
+        .await
+        .unwrap();
+        assert_eq!(balance(&service, &USER_A.to_string()).await.unwrap(), 9950);
+        assert_eq!(balance(&service, &user_b.to_string()).await.unwrap(), 495);
+        forget(&service, USER_A.to_string(), user_b.to_string())
+            .await
+            .unwrap();
+        assert_eq!(balance(&service, &USER_A.to_string()).await.unwrap(), 9450);
+        assert_eq!(balance(&service, &user_b.to_string()).await.unwrap(), 0);
+        assert_eq!(penalty(&service, &USER_A.to_string()).await.unwrap(), 550);
     }
 
     #[async_std::test]
@@ -128,20 +124,29 @@ mod tests {
             MODERATOR.to_string(),
             10000,
             PROOF_ID,
-        );
-        vouch(&service, USER_A.to_string(), user_b.to_string());
-        vouch(&service, USER_A.to_string(), user_c.to_string());
-        assert_eq!(balance(&service, &USER_A.to_string()).await, 10000);
-        assert_eq!(balance(&service, &user_b.to_string()).await, 1000);
-        assert_eq!(balance(&service, &user_c.to_string()).await, 1000);
-        forget(&service, USER_A.to_string(), user_b.to_string()).await;
-        assert_eq!(balance(&service, &USER_A.to_string()).await, 9500);
-        assert_eq!(balance(&service, &user_b.to_string()).await, 0);
-        assert_eq!(penalty(&service, &USER_A.to_string()).await, 500);
-        forget(&service, USER_A.to_string(), user_c.to_string()).await;
-        assert_eq!(balance(&service, &USER_A.to_string()).await, 9000);
-        assert_eq!(balance(&service, &user_c.to_string()).await, 0);
-        assert_eq!(penalty(&service, &USER_A.to_string()).await, 1000);
+        )
+        .await;
+        vouch(&service, USER_A.to_string(), user_b.to_string())
+            .await
+            .unwrap();
+        vouch(&service, USER_A.to_string(), user_c.to_string())
+            .await
+            .unwrap();
+        assert_eq!(balance(&service, &USER_A.to_string()).await.unwrap(), 10000);
+        assert_eq!(balance(&service, &user_b.to_string()).await.unwrap(), 1000);
+        assert_eq!(balance(&service, &user_c.to_string()).await.unwrap(), 1000);
+        forget(&service, USER_A.to_string(), user_b.to_string())
+            .await
+            .unwrap();
+        assert_eq!(balance(&service, &USER_A.to_string()).await.unwrap(), 9500);
+        assert_eq!(balance(&service, &user_b.to_string()).await.unwrap(), 0);
+        assert_eq!(penalty(&service, &USER_A.to_string()).await.unwrap(), 500);
+        forget(&service, USER_A.to_string(), user_c.to_string())
+            .await
+            .unwrap();
+        assert_eq!(balance(&service, &USER_A.to_string()).await.unwrap(), 9000);
+        assert_eq!(balance(&service, &user_c.to_string()).await.unwrap(), 0);
+        assert_eq!(penalty(&service, &USER_A.to_string()).await.unwrap(), 1000);
     }
 
     #[async_std::test]
@@ -156,25 +161,32 @@ mod tests {
             MODERATOR.to_string(),
             10000,
             PROOF_ID,
-        );
-        vouch(&service, USER_A.to_string(), user_b.to_string());
-        vouch(&service, USER_A.to_string(), user_c.to_string());
-        assert_eq!(balance(&service, &USER_A.to_string()).await, 10000);
-        assert_eq!(balance(&service, &user_b.to_string()).await, 1000);
-        assert_eq!(balance(&service, &user_c.to_string()).await, 1000);
+        )
+        .await;
+        vouch(&service, USER_A.to_string(), user_b.to_string())
+            .await
+            .unwrap();
+        vouch(&service, USER_A.to_string(), user_c.to_string())
+            .await
+            .unwrap();
+        assert_eq!(balance(&service, &USER_A.to_string()).await.unwrap(), 10000);
+        assert_eq!(balance(&service, &user_b.to_string()).await.unwrap(), 1000);
+        assert_eq!(balance(&service, &user_c.to_string()).await.unwrap(), 1000);
         // this is implementation of forget() but with overridden timestamp
         service
             .forget_with_timestamp(USER_A.to_string(), user_b.to_string(), ts - 86400 * 2)
-            .await;
-        assert_eq!(balance(&service, &USER_A.to_string()).await, 9502);
-        assert_eq!(balance(&service, &user_b.to_string()).await, 0);
-        assert_eq!(penalty(&service, &USER_A.to_string()).await, 498);
+            .await
+            .unwrap();
+        assert_eq!(balance(&service, &USER_A.to_string()).await.unwrap(), 9502);
+        assert_eq!(balance(&service, &user_b.to_string()).await.unwrap(), 0);
+        assert_eq!(penalty(&service, &USER_A.to_string()).await.unwrap(), 498);
         service
             .forget_with_timestamp(USER_A.to_string(), user_c.to_string(), ts - 86400)
-            .await;
-        assert_eq!(balance(&service, &USER_A.to_string()).await, 9003);
-        assert_eq!(balance(&service, &user_c.to_string()).await, 0);
+            .await
+            .unwrap();
+        assert_eq!(balance(&service, &USER_A.to_string()).await.unwrap(), 9003);
+        assert_eq!(balance(&service, &user_c.to_string()).await.unwrap(), 0);
         // penalties from forget() decay simultaneously for all forgotten users
-        assert_eq!(penalty(&service, &USER_A.to_string()).await, 997);
+        assert_eq!(penalty(&service, &USER_A.to_string()).await.unwrap(), 997);
     }
 }

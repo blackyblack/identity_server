@@ -67,7 +67,8 @@ pub async fn route(mut req: Request<State>) -> tide::Result {
         moderator.clone(),
         amount,
         proof_id,
-    );
+    )
+    .await;
 
     if let Err(e) = prove_result {
         match e {
@@ -81,7 +82,7 @@ pub async fn route(mut req: Request<State>) -> tide::Result {
             }
         }
     }
-    let user_balance = balance(&req.state().identity_service, &user).await;
+    let user_balance = balance(&req.state().identity_service, &user).await?;
     let response: HashMap<String, serde_json::Value> = HashMap::from([
         ("user".into(), user.into()),
         ("from".into(), moderator.into()),
