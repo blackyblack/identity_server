@@ -76,7 +76,7 @@ mod tests {
         let state = State::default();
         let (private_key, user_address) = random_keypair();
         let user_b = "userB";
-        let _ = prove(
+        prove(
             &state.identity_service,
             user_address.clone(),
             MODERATOR.to_string(),

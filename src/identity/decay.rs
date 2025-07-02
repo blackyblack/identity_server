@@ -70,11 +70,12 @@ mod tests {
         let service = IdentityService::default();
         let ts = next_timestamp();
         assert_eq!(proof_decay(&service, &USER_A.to_string()).await.unwrap(), 0);
-        let _ = service
+        service
             .prove_with_timestamp(USER_A.to_string(), MODERATOR.to_string(), 100, PROOF_ID, ts)
-            .await;
+            .await
+            .unwrap();
         assert_eq!(proof_decay(&service, &USER_A.to_string()).await.unwrap(), 0);
-        let _ = service
+        service
             .prove_with_timestamp(
                 USER_A.to_string(),
                 MODERATOR.to_string(),
@@ -82,9 +83,10 @@ mod tests {
                 PROOF_ID,
                 ts - 86400,
             )
-            .await;
+            .await
+            .unwrap();
         assert_eq!(proof_decay(&service, &USER_A.to_string()).await.unwrap(), 1);
-        let _ = service
+        service
             .prove_with_timestamp(
                 USER_A.to_string(),
                 MODERATOR.to_string(),
@@ -92,9 +94,10 @@ mod tests {
                 PROOF_ID,
                 ts - 100000,
             )
-            .await;
+            .await
+            .unwrap();
         assert_eq!(proof_decay(&service, &USER_A.to_string()).await.unwrap(), 1);
-        let _ = service
+        service
             .prove_with_timestamp(
                 USER_A.to_string(),
                 MODERATOR.to_string(),
@@ -102,7 +105,8 @@ mod tests {
                 PROOF_ID,
                 ts - 86400 * 2,
             )
-            .await;
+            .await
+            .unwrap();
         assert_eq!(proof_decay(&service, &USER_A.to_string()).await.unwrap(), 2);
     }
 

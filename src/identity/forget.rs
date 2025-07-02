@@ -56,14 +56,15 @@ mod tests {
     async fn test_basic() {
         let user_b = "userB";
         let service = IdentityService::default();
-        let _ = prove(
+        prove(
             &service,
             USER_A.to_string(),
             MODERATOR.to_string(),
             10000,
             PROOF_ID,
         )
-        .await;
+        .await
+        .unwrap();
         vouch(&service, USER_A.to_string(), user_b.to_string())
             .await
             .unwrap();
@@ -81,14 +82,15 @@ mod tests {
     async fn test_keep_penalty() {
         let user_b = "userB";
         let service = IdentityService::default();
-        let _ = prove(
+        prove(
             &service,
             USER_A.to_string(),
             MODERATOR.to_string(),
             10000,
             PROOF_ID,
         )
-        .await;
+        .await
+        .unwrap();
         vouch(&service, USER_A.to_string(), user_b.to_string())
             .await
             .unwrap();
@@ -118,14 +120,15 @@ mod tests {
         let user_b = "userB";
         let user_c = "userC";
         let service = IdentityService::default();
-        let _ = prove(
+        prove(
             &service,
             USER_A.to_string(),
             MODERATOR.to_string(),
             10000,
             PROOF_ID,
         )
-        .await;
+        .await
+        .unwrap();
         vouch(&service, USER_A.to_string(), user_b.to_string())
             .await
             .unwrap();
@@ -155,14 +158,15 @@ mod tests {
         let user_c = "userC";
         let service = IdentityService::default();
         let ts = next_timestamp();
-        let _ = prove(
+        prove(
             &service,
             USER_A.to_string(),
             MODERATOR.to_string(),
             10000,
             PROOF_ID,
         )
-        .await;
+        .await
+        .unwrap();
         vouch(&service, USER_A.to_string(), user_b.to_string())
             .await
             .unwrap();

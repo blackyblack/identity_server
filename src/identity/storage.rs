@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
-use std::sync::RwLock;
 
+use async_std::sync::RwLock;
 use async_trait::async_trait;
 
 use super::{ModeratorProof, SystemPenalty, UserAddress, error::Error};
@@ -38,7 +38,7 @@ pub struct InMemoryVouchStorage {
 #[async_trait]
 impl VouchStorage for InMemoryVouchStorage {
     async fn vouch(&self, from: UserAddress, to: UserAddress, timestamp: u64) -> Result<(), Error> {
-        let mut lock = self.data.write().expect("Poisoned RwLock detected");
+        let mut lock = self.data.write().await;
         lock.vouchers
             .entry(to.clone())
             .and_modify(|v| {
@@ -69,7 +69,7 @@ impl VouchStorage for InMemoryVouchStorage {
         Ok(self
             .data
             .read()
-            .expect("Poisoned RwLock detected")
+            .await
             .vouchers
             .get(user)
             .cloned()
@@ -83,7 +83,7 @@ impl VouchStorage for InMemoryVouchStorage {
         Ok(self
             .data
             .read()
-            .expect("Poisoned RwLock detected")
+            .await
             .vouchees
             .get(user)
             .cloned()
@@ -91,7 +91,7 @@ impl VouchStorage for InMemoryVouchStorage {
     }
 
     async fn remove_vouch(&self, voucher: UserAddress, vouchee: UserAddress) -> Result<(), Error> {
-        let mut lock = self.data.write().expect("Poisoned RwLock detected");
+        let mut lock = self.data.write().await;
         lock.vouchers.entry(vouchee.clone()).and_modify(|v| {
             v.remove(&voucher);
         });
@@ -119,20 +119,12 @@ pub struct InMemoryProofStorage {
 #[async_trait]
 impl ProofStorage for InMemoryProofStorage {
     async fn set_proof(&self, user: UserAddress, proof: ModeratorProof) -> Result<(), Error> {
-        self.data
-            .write()
-            .expect("Poisoned RwLock detected")
-            .insert(user, proof);
+        self.data.write().await.insert(user, proof);
         Ok(())
     }
 
     async fn proof(&self, user: &UserAddress) -> Result<Option<ModeratorProof>, Error> {
-        Ok(self
-            .data
-            .read()
-            .expect("Poisoned RwLock detected")
-            .get(user)
-            .cloned())
+        Ok(self.data.read().await.get(user).cloned())
     }
 }
 
@@ -181,10 +173,7 @@ impl PenaltyStorage for InMemoryPenaltyStorage {
         user: UserAddress,
         proof: ModeratorProof,
     ) -> Result<(), Error> {
-        self.moderator_penalty
-            .write()
-            .expect("Poisoned RwLock detected")
-            .insert(user, proof);
+        self.moderator_penalty.write().await.insert(user, proof);
         Ok(())
     }
 
@@ -196,7 +185,7 @@ impl PenaltyStorage for InMemoryPenaltyStorage {
     ) -> Result<(), Error> {
         self.forget_penalties
             .write()
-            .expect("Poisoned RwLock detected")
+            .await
             .entry(user)
             .and_modify(|v| {
                 v.insert(vouchee.clone(), penalty.clone());
@@ -212,7 +201,7 @@ impl PenaltyStorage for InMemoryPenaltyStorage {
     ) -> Result<(), Error> {
         self.forget_penalties
             .write()
-            .expect("Poisoned RwLock detected")
+            .await
             .entry(user)
             .and_modify(|v| {
                 v.remove(forgotten);
@@ -221,12 +210,7 @@ impl PenaltyStorage for InMemoryPenaltyStorage {
     }
 
     async fn moderator_penalty(&self, user: &UserAddress) -> Result<Option<ModeratorProof>, Error> {
-        Ok(self
-            .moderator_penalty
-            .read()
-            .expect("Poisoned RwLock detected")
-            .get(user)
-            .cloned())
+        Ok(self.moderator_penalty.read().await.get(user).cloned())
     }
 
     async fn forgotten_penalty(
@@ -237,7 +221,7 @@ impl PenaltyStorage for InMemoryPenaltyStorage {
         Ok(self
             .forget_penalties
             .read()
-            .expect("Poisoned RwLock detected")
+            .await
             .get(user)
             .and_then(|v| v.get(forgotten).cloned()))
     }
@@ -246,7 +230,7 @@ impl PenaltyStorage for InMemoryPenaltyStorage {
         Ok(self
             .forget_penalties
             .read()
-            .expect("Poisoned RwLock detected")
+            .await
             .get(user)
             .cloned()
             .unwrap_or_default()

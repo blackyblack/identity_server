@@ -273,14 +273,15 @@ mod tests {
     #[async_std::test]
     async fn test_penalty() {
         let service = IdentityService::default();
-        let _ = prove(
+        prove(
             &service,
             USER_A.to_string(),
             MODERATOR.to_string(),
             100,
             PROOF_ID,
         )
-        .await;
+        .await
+        .unwrap();
         assert_eq!(balance(&service, &USER_A.to_string()).await.unwrap(), 100);
         punish(
             &service,
@@ -298,14 +299,15 @@ mod tests {
     #[async_std::test]
     async fn test_max_penalty() {
         let service = IdentityService::default();
-        let _ = prove(
+        prove(
             &service,
             USER_A.to_string(),
             MODERATOR.to_string(),
             100,
             PROOF_ID,
         )
-        .await;
+        .await
+        .unwrap();
         assert_eq!(balance(&service, &USER_A.to_string()).await.unwrap(), 100);
         punish(
             &service,
@@ -325,22 +327,24 @@ mod tests {
     async fn test_penalty_for_voucher() {
         let service = IdentityService::default();
         let user_b = "userB";
-        let _ = prove(
+        prove(
             &service,
             USER_A.to_string(),
             MODERATOR.to_string(),
             100,
             PROOF_ID,
         )
-        .await;
-        let _ = prove(
+        .await
+        .unwrap();
+        prove(
             &service,
             user_b.to_string(),
             MODERATOR.to_string(),
             200,
             PROOF_ID,
         )
-        .await;
+        .await
+        .unwrap();
         vouch(&service, USER_A.to_string(), user_b.to_string())
             .await
             .unwrap();
@@ -370,22 +374,24 @@ mod tests {
     async fn test_max_penalty_from_vouchees() {
         let service = IdentityService::default();
         let user_b = "userB";
-        let _ = prove(
+        prove(
             &service,
             USER_A.to_string(),
             MODERATOR.to_string(),
             100,
             PROOF_ID,
         )
-        .await;
-        let _ = prove(
+        .await
+        .unwrap();
+        prove(
             &service,
             user_b.to_string(),
             MODERATOR.to_string(),
             200,
             PROOF_ID,
         )
-        .await;
+        .await
+        .unwrap();
         vouch(&service, USER_A.to_string(), user_b.to_string())
             .await
             .unwrap();

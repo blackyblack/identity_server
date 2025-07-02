@@ -99,14 +99,15 @@ mod tests {
     async fn test_basic() {
         let user_b = "userB";
         let service = IdentityService::default();
-        let _ = prove(
+        prove(
             &service,
             USER_A.to_string(),
             MODERATOR.to_string(),
             100,
             PROOF_ID,
         )
-        .await;
+        .await
+        .unwrap();
         assert_eq!(balance(&service, &USER_A.to_string()).await.unwrap(), 100);
         assert_eq!(balance(&service, &user_b.to_string()).await.unwrap(), 0);
         vouch(&service, USER_A.to_string(), user_b.to_string())
@@ -122,14 +123,15 @@ mod tests {
     async fn test_cyclic() {
         let user_b = "userB";
         let service = IdentityService::default();
-        let _ = prove(
+        prove(
             &service,
             USER_A.to_string(),
             MODERATOR.to_string(),
             100,
             PROOF_ID,
         )
-        .await;
+        .await
+        .unwrap();
         vouch(&service, USER_A.to_string(), user_b.to_string())
             .await
             .unwrap();
@@ -147,22 +149,24 @@ mod tests {
     async fn test_mutual() {
         let user_b = "userB";
         let service = IdentityService::default();
-        let _ = prove(
+        prove(
             &service,
             USER_A.to_string(),
             MODERATOR.to_string(),
             100,
             PROOF_ID,
         )
-        .await;
-        let _ = prove(
+        .await
+        .unwrap();
+        prove(
             &service,
             user_b.to_string(),
             MODERATOR.to_string(),
             200,
             PROOF_ID,
         )
-        .await;
+        .await
+        .unwrap();
         assert_eq!(balance(&service, &USER_A.to_string()).await.unwrap(), 100);
         assert_eq!(balance(&service, &user_b.to_string()).await.unwrap(), 200);
         vouch(&service, USER_A.to_string(), user_b.to_string())
@@ -186,30 +190,33 @@ mod tests {
         let user_c = "userC";
         let user_d = "userD";
         let service = IdentityService::default();
-        let _ = prove(
+        prove(
             &service,
             USER_A.to_string(),
             MODERATOR.to_string(),
             10000,
             PROOF_ID,
         )
-        .await;
-        let _ = prove(
+        .await
+        .unwrap();
+        prove(
             &service,
             user_b.to_string(),
             MODERATOR.to_string(),
             20000,
             PROOF_ID,
         )
-        .await;
-        let _ = prove(
+        .await
+        .unwrap();
+        prove(
             &service,
             user_c.to_string(),
             MODERATOR.to_string(),
             30000,
             PROOF_ID,
         )
-        .await;
+        .await
+        .unwrap();
         assert_eq!(balance(&service, &USER_A.to_string()).await.unwrap(), 10000);
         assert_eq!(balance(&service, &user_b.to_string()).await.unwrap(), 20000);
         assert_eq!(balance(&service, &user_c.to_string()).await.unwrap(), 30000);
@@ -245,62 +252,69 @@ mod tests {
         let user_f = "userF";
         let user_g = "userG";
         let service = IdentityService::default();
-        let _ = prove(
+        prove(
             &service,
             USER_A.to_string(),
             MODERATOR.to_string(),
             1000,
             PROOF_ID,
         )
-        .await;
-        let _ = prove(
+        .await
+        .unwrap();
+        prove(
             &service,
             user_b.to_string(),
             MODERATOR.to_string(),
             2000,
             PROOF_ID,
         )
-        .await;
-        let _ = prove(
+        .await
+        .unwrap();
+        prove(
             &service,
             user_c.to_string(),
             MODERATOR.to_string(),
             3000,
             PROOF_ID,
         )
-        .await;
-        let _ = prove(
+        .await
+        .unwrap();
+        prove(
             &service,
             user_d.to_string(),
             MODERATOR.to_string(),
             4000,
             PROOF_ID,
         )
-        .await;
-        let _ = prove(
+        .await
+        .unwrap();
+        prove(
             &service,
             user_e.to_string(),
             MODERATOR.to_string(),
             5000,
             PROOF_ID,
         )
-        .await;
-        let _ = prove(
+        .await
+        .unwrap();
+        prove(
             &service,
             user_f.to_string(),
             MODERATOR.to_string(),
             6000,
             PROOF_ID,
         )
-        .await;
-        let _ = prove(
+        .await
+        .unwrap();
+        prove(
             &service,
             user_g.to_string(),
             MODERATOR.to_string(),
             7000,
             PROOF_ID,
         )
-        .await;
+        .await
+        .unwrap();
         assert_eq!(balance(&service, &USER_A.to_string()).await.unwrap(), 1000);
         assert_eq!(balance(&service, &user_b.to_string()).await.unwrap(), 2000);
         assert_eq!(balance(&service, &user_c.to_string()).await.unwrap(), 3000);
@@ -377,7 +391,7 @@ mod tests {
         let ts = next_timestamp();
         let user_b = "userB";
         let service = IdentityService::default();
-        let _ = service
+        service
             .prove_with_timestamp(
                 USER_A.to_string(),
                 MODERATOR.to_string(),
@@ -385,10 +399,11 @@ mod tests {
                 PROOF_ID,
                 ts,
             )
-            .await;
+            .await
+            .unwrap();
         assert_eq!(balance(&service, &USER_A.to_string()).await.unwrap(), 1000);
 
-        let _ = service
+        service
             .prove_with_timestamp(
                 USER_A.to_string(),
                 MODERATOR.to_string(),
@@ -396,11 +411,12 @@ mod tests {
                 PROOF_ID,
                 ts - 86400,
             )
-            .await;
+            .await
+            .unwrap();
         // decay after 1 day
         assert_eq!(balance(&service, &USER_A.to_string()).await.unwrap(), 999);
 
-        let _ = service
+        service
             .prove_with_timestamp(
                 USER_A.to_string(),
                 MODERATOR.to_string(),
@@ -408,11 +424,12 @@ mod tests {
                 PROOF_ID,
                 ts - 86400 * 10,
             )
-            .await;
+            .await
+            .unwrap();
         // cannot go lower than 0
         assert_eq!(balance(&service, &USER_A.to_string()).await.unwrap(), 0);
 
-        let _ = service
+        service
             .prove_with_timestamp(
                 user_b.to_string(),
                 MODERATOR.to_string(),
@@ -420,7 +437,8 @@ mod tests {
                 PROOF_ID,
                 ts,
             )
-            .await;
+            .await
+            .unwrap();
 
         vouch(&service, user_b.to_string(), USER_A.to_string())
             .await
@@ -436,7 +454,7 @@ mod tests {
         // vouch balance also decays at 1 IDT per day rate
         assert_eq!(balance(&service, &USER_A.to_string()).await.unwrap(), 99);
 
-        let _ = service
+        service
             .prove_with_timestamp(
                 user_b.to_string(),
                 MODERATOR.to_string(),
@@ -444,7 +462,8 @@ mod tests {
                 PROOF_ID,
                 ts - 86400,
             )
-            .await;
+            .await
+            .unwrap();
         assert_eq!(balance(&service, &USER_A.to_string()).await.unwrap(), 98);
     }
 }

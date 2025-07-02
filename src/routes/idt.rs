@@ -33,7 +33,7 @@ mod tests {
     async fn test_basic() {
         let state = State::default();
 
-        let _ = prove(
+        prove(
             &state.identity_service,
             USER_A.to_string(),
             MODERATOR.to_string(),

@@ -116,7 +116,7 @@ mod tests {
         let user_id = USER_A;
         let amount = 5000;
 
-        let _ = prove(
+        prove(
             &state.identity_service,
             USER_A.to_string(),
             moderator.clone(),
