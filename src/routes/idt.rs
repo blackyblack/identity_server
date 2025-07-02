@@ -7,7 +7,7 @@ use crate::{identity::idt::balance, routes::State};
 
 pub async fn route(req: Request<State>) -> tide::Result {
     let user = req.param("user")?;
-    let balance = balance(&req.state().identity_service, &user.to_string()).await;
+    let balance = balance(&req.state().identity_service, &user.to_string()).await?;
     let response: HashMap<String, serde_json::Value> = HashMap::from([
         ("user".into(), user.into()),
         ("idt".into(), balance.to_string().into()),
@@ -33,13 +33,15 @@ mod tests {
     async fn test_basic() {
         let state = State::default();
 
-        let _ = prove(
+        prove(
             &state.identity_service,
             USER_A.to_string(),
             MODERATOR.to_string(),
             100,
             PROOF_ID,
-        );
+        )
+        .await
+        .unwrap();
 
         let req_url = format!("/idt/{USER_A}");
         let req = HttpRequest::new(

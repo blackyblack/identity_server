@@ -5,7 +5,7 @@ use crate::identity::{
 pub const MAX_IDT_BY_PROOF: IdtAmount = 50000;
 
 impl IdentityService {
-    pub fn prove_with_timestamp(
+    pub async fn prove_with_timestamp(
         &self,
         user: UserAddress,
         moderator: UserAddress,
@@ -22,30 +22,25 @@ impl IdentityService {
             proof_id,
             timestamp,
         };
-        self.proofs
-            .write()
-            .expect("Poisoned RwLock detected")
-            .insert(user, event);
-        Ok(())
+        self.proofs.set_proof(user, event).await
     }
 
-    pub fn proof(&self, user: &UserAddress) -> Option<ModeratorProof> {
-        self.proofs
-            .read()
-            .expect("Poisoned RwLock detected")
-            .get(user)
-            .cloned()
+    // TODO: avoid Option
+    pub async fn proof(&self, user: &UserAddress) -> Result<Option<ModeratorProof>, Error> {
+        self.proofs.proof(user).await
     }
 }
 
-pub fn prove(
+pub async fn prove(
     service: &IdentityService,
     user: UserAddress,
     moderator: UserAddress,
     balance: IdtAmount,
     proof_id: ProofId,
 ) -> Result<(), Error> {
-    service.prove_with_timestamp(user, moderator, balance, proof_id, next_timestamp())
+    service
+        .prove_with_timestamp(user, moderator, balance, proof_id, next_timestamp())
+        .await
 }
 
 #[cfg(test)]
@@ -54,10 +49,10 @@ mod tests {
 
     use super::*;
 
-    #[test]
-    fn test_basic() {
+    #[async_std::test]
+    async fn test_basic() {
         let service = IdentityService::default();
-        assert!(service.proof(&USER_A.to_string()).is_none());
+        assert!(service.proof(&USER_A.to_string()).await.unwrap().is_none());
         assert!(
             prove(
                 &service,
@@ -66,35 +61,95 @@ mod tests {
                 100,
                 PROOF_ID
             )
+            .await
             .is_ok()
         );
-        assert_eq!(service.proof(&USER_A.to_string()).unwrap().amount, 100);
         assert_eq!(
-            service.proof(&USER_A.to_string()).unwrap().moderator,
+            service
+                .proof(&USER_A.to_string())
+                .await
+                .unwrap()
+                .unwrap()
+                .amount,
+            100
+        );
+        assert_eq!(
+            service
+                .proof(&USER_A.to_string())
+                .await
+                .unwrap()
+                .unwrap()
+                .moderator,
             MODERATOR
         );
         assert_eq!(
-            service.proof(&USER_A.to_string()).unwrap().proof_id,
+            service
+                .proof(&USER_A.to_string())
+                .await
+                .unwrap()
+                .unwrap()
+                .proof_id,
             PROOF_ID
         );
-        assert!(service.proof(&USER_A.to_string()).unwrap().timestamp > 0);
+        assert!(
+            service
+                .proof(&USER_A.to_string())
+                .await
+                .unwrap()
+                .unwrap()
+                .timestamp
+                > 0
+        );
 
-        assert!(prove(&service, USER_A.to_string(), MODERATOR.to_string(), 200, 2).is_ok());
-        assert_eq!(service.proof(&USER_A.to_string()).unwrap().amount, 200);
+        assert!(
+            prove(&service, USER_A.to_string(), MODERATOR.to_string(), 200, 2)
+                .await
+                .is_ok()
+        );
         assert_eq!(
-            service.proof(&USER_A.to_string()).unwrap().moderator,
+            service
+                .proof(&USER_A.to_string())
+                .await
+                .unwrap()
+                .unwrap()
+                .amount,
+            200
+        );
+        assert_eq!(
+            service
+                .proof(&USER_A.to_string())
+                .await
+                .unwrap()
+                .unwrap()
+                .moderator,
             MODERATOR
         );
-        assert_eq!(service.proof(&USER_A.to_string()).unwrap().proof_id, 2);
+        assert_eq!(
+            service
+                .proof(&USER_A.to_string())
+                .await
+                .unwrap()
+                .unwrap()
+                .proof_id,
+            2
+        );
         // we do not compare with previous timestamp because it is measured in seconds and
         // test runs way much faster
-        assert!(service.proof(&USER_A.to_string()).unwrap().timestamp > 0);
+        assert!(
+            service
+                .proof(&USER_A.to_string())
+                .await
+                .unwrap()
+                .unwrap()
+                .timestamp
+                > 0
+        );
     }
 
-    #[test]
-    fn test_max_balance() {
+    #[async_std::test]
+    async fn test_max_balance() {
         let service = IdentityService::default();
-        assert!(service.proof(&USER_A.to_string()).is_none());
+        assert!(service.proof(&USER_A.to_string()).await.unwrap().is_none());
         assert!(
             prove(
                 &service,
@@ -103,9 +158,18 @@ mod tests {
                 40000,
                 PROOF_ID
             )
+            .await
             .is_ok()
         );
-        assert_eq!(service.proof(&USER_A.to_string()).unwrap().amount, 40000);
+        assert_eq!(
+            service
+                .proof(&USER_A.to_string())
+                .await
+                .unwrap()
+                .unwrap()
+                .amount,
+            40000
+        );
         assert!(
             prove(
                 &service,
@@ -114,9 +178,18 @@ mod tests {
                 50001,
                 PROOF_ID
             )
+            .await
             .is_err()
         );
-        assert_eq!(service.proof(&USER_A.to_string()).unwrap().amount, 40000);
+        assert_eq!(
+            service
+                .proof(&USER_A.to_string())
+                .await
+                .unwrap()
+                .unwrap()
+                .amount,
+            40000
+        );
         assert!(
             prove(
                 &service,
@@ -125,8 +198,17 @@ mod tests {
                 60000,
                 PROOF_ID
             )
+            .await
             .is_err()
         );
-        assert_eq!(service.proof(&USER_A.to_string()).unwrap().amount, 40000);
+        assert_eq!(
+            service
+                .proof(&USER_A.to_string())
+                .await
+                .unwrap()
+                .unwrap()
+                .amount,
+            40000
+        );
     }
 }

@@ -1,7 +1,8 @@
+use async_std::sync::RwLock;
 use async_trait::async_trait;
 
 use crate::{admins::error::Error, identity::UserAddress};
-use std::{collections::HashSet, sync::RwLock};
+use std::collections::HashSet;
 
 pub mod error;
 
@@ -42,44 +43,34 @@ impl InMemoryAdminStorage {
 #[async_trait]
 impl AdminStorage for InMemoryAdminStorage {
     async fn is_admin(&self, user: &UserAddress) -> Result<(), Error> {
-        if self
-            .admins
-            .read()
-            .expect("Poisoned RwLock detected")
-            .contains(user)
-        {
+        if self.admins.read().await.contains(user) {
             return Ok(());
         }
-        Err(Error::NoAdminPriviledge)
+        Err(Error::NoAdminPrivilege)
     }
 
     async fn is_moderator(&self, user: &UserAddress) -> Result<(), Error> {
-        if self
-            .moderators
-            .read()
-            .expect("Poisoned RwLock detected")
-            .contains(user)
-        {
+        if self.moderators.read().await.contains(user) {
             return Ok(());
         }
-        Err(Error::NoAdminPriviledge)
+        Err(Error::NoAdminPrivilege)
     }
 
     async fn add_admin(&self, caller: &UserAddress, new_admin: UserAddress) -> Result<(), Error> {
-        let mut admins_lock = self.admins.write().expect("Poisoned RwLock detected");
+        let mut admins_lock = self.admins.write().await;
         // do not use is_admin() since we want to check for admin rights and
         // update admins atomically
         if !admins_lock.contains(caller) {
-            return Err(Error::NoAdminPriviledge);
+            return Err(Error::NoAdminPrivilege);
         }
         admins_lock.insert(new_admin);
         Ok(())
     }
 
     async fn remove_admin(&self, caller: &UserAddress, admin: UserAddress) -> Result<(), Error> {
-        let mut admins_lock = self.admins.write().expect("Poisoned RwLock detected");
+        let mut admins_lock = self.admins.write().await;
         if !admins_lock.contains(caller) {
-            return Err(Error::NoAdminPriviledge);
+            return Err(Error::NoAdminPrivilege);
         }
         admins_lock.remove(&admin);
         Ok(())
@@ -90,14 +81,11 @@ impl AdminStorage for InMemoryAdminStorage {
         caller: &UserAddress,
         moderator: UserAddress,
     ) -> Result<(), Error> {
-        let admins_lock = self.admins.read().expect("Poisoned RwLock detected");
+        let admins_lock = self.admins.read().await;
         if !admins_lock.contains(caller) {
-            return Err(Error::NoAdminPriviledge);
+            return Err(Error::NoAdminPrivilege);
         }
-        self.moderators
-            .write()
-            .expect("Poisoned RwLock detected")
-            .insert(moderator);
+        self.moderators.write().await.insert(moderator);
         Ok(())
     }
 
@@ -106,14 +94,11 @@ impl AdminStorage for InMemoryAdminStorage {
         caller: &UserAddress,
         moderator: UserAddress,
     ) -> Result<(), Error> {
-        let admins_lock = self.admins.read().expect("Poisoned RwLock detected");
+        let admins_lock = self.admins.read().await;
         if !admins_lock.contains(caller) {
-            return Err(Error::NoAdminPriviledge);
+            return Err(Error::NoAdminPrivilege);
         }
-        self.moderators
-            .write()
-            .expect("Poisoned RwLock detected")
-            .remove(&moderator);
+        self.moderators.write().await.remove(&moderator);
         Ok(())
     }
 }
@@ -130,11 +115,7 @@ mod tests {
         let regular_user = "user".to_string();
 
         // Add initial admin
-        storage
-            .admins
-            .write()
-            .expect("Poisoned RwLock detected")
-            .insert(admin.clone());
+        storage.admins.write().await.insert(admin.clone());
 
         // Check permissions
         assert!(storage.is_admin(&admin).await.is_ok());
@@ -148,11 +129,7 @@ mod tests {
         let admin = "admin".to_string();
         let moderator = "moderator".to_string();
 
-        storage
-            .admins
-            .write()
-            .expect("Poisoned RwLock detected")
-            .insert(admin.clone());
+        storage.admins.write().await.insert(admin.clone());
 
         // Add moderator
         assert!(
@@ -180,13 +157,7 @@ mod tests {
                 .is_ok()
         );
         assert!(storage.is_moderator(&moderator).await.is_err());
-        assert!(
-            !storage
-                .moderators
-                .read()
-                .expect("Poisoned RwLock detected")
-                .contains(&moderator)
-        );
+        assert!(!storage.moderators.read().await.contains(&moderator));
     }
 
     #[async_std::test]
@@ -195,11 +166,7 @@ mod tests {
         let admin1 = "admin1".to_string();
         let admin2 = "admin2".to_string();
 
-        storage
-            .admins
-            .write()
-            .expect("Poisoned RwLock detected")
-            .insert(admin1.clone());
+        storage.admins.write().await.insert(admin1.clone());
 
         // Admin can add another admin
         assert!(storage.add_admin(&admin1, admin2.clone()).await.is_ok());
@@ -224,11 +191,7 @@ mod tests {
         let storage = InMemoryAdminStorage::default();
         let admin = "admin".to_string();
 
-        storage
-            .admins
-            .write()
-            .expect("Poisoned RwLock detected")
-            .insert(admin.clone());
+        storage.admins.write().await.insert(admin.clone());
 
         // Rremoving non-existent moderator should still return Ok
         let non_existent = "non_existent".to_string();

@@ -1,81 +1,86 @@
 use std::collections::HashMap;
 
-use crate::identity::{IdentityService, UserAddress, next_timestamp};
+use crate::identity::{IdentityService, UserAddress, error::Error, next_timestamp};
 
 impl IdentityService {
-    pub fn vouch_with_timestamp(&self, from: UserAddress, to: UserAddress, timestamp: u64) {
-        let mut vouches_lock = self.vouches.write().expect("Poisoned RwLock detected");
-        vouches_lock
-            .vouchers
-            .entry(to.clone())
-            .and_modify(|v| {
-                v.insert(from.clone(), timestamp);
-            })
-            .or_insert_with(|| {
-                let mut m = HashMap::new();
-                m.insert(from.clone(), timestamp);
-                m
-            });
-        vouches_lock
-            .vouchees
-            .entry(from)
-            .and_modify(|v| {
-                v.insert(to.clone(), timestamp);
-            })
-            .or_insert_with(|| {
-                let mut m = HashMap::new();
-                m.insert(to, timestamp);
-                m
-            });
+    pub async fn vouch_with_timestamp(
+        &self,
+        from: UserAddress,
+        to: UserAddress,
+        timestamp: u64,
+    ) -> Result<(), Error> {
+        self.vouches.vouch(from, to, timestamp).await
     }
 
-    pub fn vouchers_with_time(&self, user: &UserAddress) -> HashMap<UserAddress, u64> {
-        self.vouches
-            .read()
-            .expect("Poisoned RwLock detected")
-            .vouchers
-            .get(user)
-            .cloned()
-            .unwrap_or_default()
+    pub async fn vouchers_with_time(
+        &self,
+        user: &UserAddress,
+    ) -> Result<HashMap<UserAddress, u64>, Error> {
+        self.vouches.vouchers_with_time(user).await
     }
 
-    pub fn vouchees_with_time(&self, user: &UserAddress) -> HashMap<UserAddress, u64> {
-        self.vouches
-            .read()
-            .expect("Poisoned RwLock detected")
-            .vouchees
-            .get(user)
-            .cloned()
-            .unwrap_or_default()
+    pub async fn vouchees_with_time(
+        &self,
+        user: &UserAddress,
+    ) -> Result<HashMap<UserAddress, u64>, Error> {
+        self.vouches.vouchees_with_time(user).await
     }
 }
 
-pub fn vouch(service: &IdentityService, from: UserAddress, to: UserAddress) {
-    service.vouch_with_timestamp(from, to, next_timestamp());
+pub async fn vouch(
+    service: &IdentityService,
+    from: UserAddress,
+    to: UserAddress,
+) -> Result<(), Error> {
+    service
+        .vouch_with_timestamp(from, to, next_timestamp())
+        .await
 }
 
-pub fn vouchers(service: &IdentityService, user: &UserAddress) -> Vec<UserAddress> {
-    service.vouchers_with_time(user).into_keys().collect()
+pub async fn vouchers(
+    service: &IdentityService,
+    user: &UserAddress,
+) -> Result<Vec<UserAddress>, Error> {
+    Ok(service
+        .vouchers_with_time(user)
+        .await?
+        .into_keys()
+        .collect())
 }
 
-pub fn vouchees(service: &IdentityService, user: &UserAddress) -> Vec<UserAddress> {
-    service.vouchees_with_time(user).into_keys().collect()
+pub async fn vouchees(
+    service: &IdentityService,
+    user: &UserAddress,
+) -> Result<Vec<UserAddress>, Error> {
+    Ok(service
+        .vouchees_with_time(user)
+        .await?
+        .into_keys()
+        .collect())
 }
 
-pub fn voucher_timestamp(
+pub async fn voucher_timestamp(
     service: &IdentityService,
     user: &UserAddress,
     voucher: &UserAddress,
-) -> Option<u64> {
-    service.vouchers_with_time(user).get(voucher).copied()
+) -> Result<Option<u64>, Error> {
+    Ok(service
+        .vouchers_with_time(user)
+        .await?
+        .get(voucher)
+        .copied())
 }
 
-pub fn vouchee_timestamp(
+pub async fn vouchee_timestamp(
     service: &IdentityService,
     user: &UserAddress,
     vouchee: &UserAddress,
-) -> Option<u64> {
-    service.vouchees_with_time(user).get(vouchee).copied()
+) -> Result<Option<u64>, Error> {
+    Ok(service
+        .vouchees_with_time(user)
+        .await?
+        .get(vouchee)
+        .copied())
 }
 
 #[cfg(test)]
@@ -84,64 +89,76 @@ mod tests {
 
     use super::*;
 
-    #[test]
-    fn test_basic() {
+    #[async_std::test]
+    async fn test_basic() {
         let service = IdentityService::default();
         let user_b = "userB";
-        assert!(vouchees(&service, &USER_A.to_string()).len() == 0);
-        assert!(vouchers(&service, &USER_A.to_string()).len() == 0);
-        vouch(&service, USER_A.to_string(), user_b.to_string());
-        assert!(vouchees(&service, &USER_A.to_string()).len() == 1);
-        assert!(vouchers(&service, &USER_A.to_string()).len() == 0);
-        assert!(vouchees(&service, &user_b.to_string()).len() == 0);
-        assert!(vouchers(&service, &user_b.to_string()).len() == 1);
+        assert!(vouchees(&service, &USER_A.to_string()).await.unwrap().len() == 0);
+        assert!(vouchers(&service, &USER_A.to_string()).await.unwrap().len() == 0);
+        vouch(&service, USER_A.to_string(), user_b.to_string())
+            .await
+            .unwrap();
+        assert!(vouchees(&service, &USER_A.to_string()).await.unwrap().len() == 1);
+        assert!(vouchers(&service, &USER_A.to_string()).await.unwrap().len() == 0);
+        assert!(vouchees(&service, &user_b.to_string()).await.unwrap().len() == 0);
+        assert!(vouchers(&service, &user_b.to_string()).await.unwrap().len() == 1);
     }
 
-    #[test]
-    fn test_vouch_self() {
+    #[async_std::test]
+    async fn test_vouch_self() {
         let service = IdentityService::default();
-        assert!(vouchees(&service, &USER_A.to_string()).len() == 0);
-        assert!(vouchers(&service, &USER_A.to_string()).len() == 0);
+        assert!(vouchees(&service, &USER_A.to_string()).await.unwrap().len() == 0);
+        assert!(vouchers(&service, &USER_A.to_string()).await.unwrap().len() == 0);
         // user can vouch for himself
-        vouch(&service, USER_A.to_string(), USER_A.to_string());
-        assert!(vouchees(&service, &USER_A.to_string()).len() == 1);
-        assert!(vouchers(&service, &USER_A.to_string()).len() == 1);
+        vouch(&service, USER_A.to_string(), USER_A.to_string())
+            .await
+            .unwrap();
+        assert!(vouchees(&service, &USER_A.to_string()).await.unwrap().len() == 1);
+        assert!(vouchers(&service, &USER_A.to_string()).await.unwrap().len() == 1);
     }
 
-    #[test]
-    fn test_vouch_twice() {
+    #[async_std::test]
+    async fn test_vouch_twice() {
         let service = IdentityService::default();
         let user_b = "userB";
-        assert!(vouchees(&service, &USER_A.to_string()).len() == 0);
-        assert!(vouchers(&service, &USER_A.to_string()).len() == 0);
-        vouch(&service, USER_A.to_string(), user_b.to_string());
-        assert!(vouchees(&service, &USER_A.to_string()).len() == 1);
-        assert!(vouchers(&service, &USER_A.to_string()).len() == 0);
-        assert!(vouchees(&service, &user_b.to_string()).len() == 0);
-        assert!(vouchers(&service, &user_b.to_string()).len() == 1);
+        assert!(vouchees(&service, &USER_A.to_string()).await.unwrap().len() == 0);
+        assert!(vouchers(&service, &USER_A.to_string()).await.unwrap().len() == 0);
+        vouch(&service, USER_A.to_string(), user_b.to_string())
+            .await
+            .unwrap();
+        assert!(vouchees(&service, &USER_A.to_string()).await.unwrap().len() == 1);
+        assert!(vouchers(&service, &USER_A.to_string()).await.unwrap().len() == 0);
+        assert!(vouchees(&service, &user_b.to_string()).await.unwrap().len() == 0);
+        assert!(vouchers(&service, &user_b.to_string()).await.unwrap().len() == 1);
         // duplicate vouch does not change anything
-        vouch(&service, USER_A.to_string(), user_b.to_string());
-        assert!(vouchees(&service, &USER_A.to_string()).len() == 1);
-        assert!(vouchers(&service, &USER_A.to_string()).len() == 0);
-        assert!(vouchees(&service, &user_b.to_string()).len() == 0);
-        assert!(vouchers(&service, &user_b.to_string()).len() == 1);
+        vouch(&service, USER_A.to_string(), user_b.to_string())
+            .await
+            .unwrap();
+        assert!(vouchees(&service, &USER_A.to_string()).await.unwrap().len() == 1);
+        assert!(vouchers(&service, &USER_A.to_string()).await.unwrap().len() == 0);
+        assert!(vouchees(&service, &user_b.to_string()).await.unwrap().len() == 0);
+        assert!(vouchers(&service, &user_b.to_string()).await.unwrap().len() == 1);
     }
 
-    #[test]
-    fn test_vouch_mutual() {
+    #[async_std::test]
+    async fn test_vouch_mutual() {
         let service = IdentityService::default();
         let user_b = "userB";
-        assert!(vouchees(&service, &USER_A.to_string()).len() == 0);
-        assert!(vouchers(&service, &USER_A.to_string()).len() == 0);
-        vouch(&service, USER_A.to_string(), user_b.to_string());
-        assert!(vouchees(&service, &USER_A.to_string()).len() == 1);
-        assert!(vouchers(&service, &USER_A.to_string()).len() == 0);
-        assert!(vouchees(&service, &user_b.to_string()).len() == 0);
-        assert!(vouchers(&service, &user_b.to_string()).len() == 1);
-        vouch(&service, user_b.to_string(), USER_A.to_string());
-        assert!(vouchees(&service, &USER_A.to_string()).len() == 1);
-        assert!(vouchers(&service, &USER_A.to_string()).len() == 1);
-        assert!(vouchees(&service, &user_b.to_string()).len() == 1);
-        assert!(vouchers(&service, &user_b.to_string()).len() == 1);
+        assert!(vouchees(&service, &USER_A.to_string()).await.unwrap().len() == 0);
+        assert!(vouchers(&service, &USER_A.to_string()).await.unwrap().len() == 0);
+        vouch(&service, USER_A.to_string(), user_b.to_string())
+            .await
+            .unwrap();
+        assert!(vouchees(&service, &USER_A.to_string()).await.unwrap().len() == 1);
+        assert!(vouchers(&service, &USER_A.to_string()).await.unwrap().len() == 0);
+        assert!(vouchees(&service, &user_b.to_string()).await.unwrap().len() == 0);
+        assert!(vouchers(&service, &user_b.to_string()).await.unwrap().len() == 1);
+        vouch(&service, user_b.to_string(), USER_A.to_string())
+            .await
+            .unwrap();
+        assert!(vouchees(&service, &USER_A.to_string()).await.unwrap().len() == 1);
+        assert!(vouchers(&service, &USER_A.to_string()).await.unwrap().len() == 1);
+        assert!(vouchees(&service, &user_b.to_string()).await.unwrap().len() == 1);
+        assert!(vouchers(&service, &user_b.to_string()).await.unwrap().len() == 1);
     }
 }

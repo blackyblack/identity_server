@@ -44,8 +44,8 @@ pub async fn route(mut req: Request<State>) -> tide::Result {
         voucher.clone(),
         vouchee.clone(),
     )
-    .await;
-    let voucher_balance = balance(&req.state().identity_service, &voucher).await;
+    .await?;
+    let voucher_balance = balance(&req.state().identity_service, &voucher).await?;
     let response: HashMap<String, serde_json::Value> = HashMap::from([
         ("from".into(), voucher.into()),
         ("to".into(), vouchee.into()),
@@ -78,18 +78,22 @@ mod tests {
         let state = State::default();
         let (private_key, user_address) = random_keypair();
         let user_b = "userB";
-        let _ = prove(
+        prove(
             &state.identity_service,
             user_address.clone(),
             MODERATOR.to_string(),
             10000,
             PROOF_ID,
-        );
+        )
+        .await
+        .unwrap();
         vouch(
             &state.identity_service,
             user_address.clone(),
             user_b.to_string(),
-        );
+        )
+        .await
+        .unwrap();
 
         let req_url = format!("/forget/{user_b}");
         let signature = forget_sign(&private_key, user_b.to_string(), &*state.nonce_manager)

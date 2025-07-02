@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::identity::{IdtAmount, UserAddress};
+use crate::identity::{IdtAmount, UserAddress, error::Error};
 
 pub trait Visitor {
     // called when all children of the node are processed
@@ -12,11 +12,11 @@ pub trait Visitor {
         node: &UserAddress,
         visited_branch: &im::HashSet<UserAddress>,
         balances: &HashMap<UserAddress, IdtAmount>,
-    ) -> IdtAmount;
+    ) -> Result<IdtAmount, Error>;
 }
 
 pub trait ChildrenSelector {
-    async fn children(&self, root: &UserAddress) -> Vec<UserAddress>;
+    async fn children(&self, root: &UserAddress) -> Result<Vec<UserAddress>, Error>;
 }
 
 #[derive(Clone)]
@@ -26,7 +26,7 @@ struct VisitNode {
     pub visited_branch: im::HashSet<UserAddress>,
 }
 
-pub async fn walk_tree<T>(tree: &T, root: &UserAddress) -> IdtAmount
+pub async fn walk_tree<T>(tree: &T, root: &UserAddress) -> Result<IdtAmount, Error>
 where
     T: ChildrenSelector + Visitor,
 {
@@ -46,7 +46,7 @@ where
 
     loop {
         let (user, visit_node) = match stack.pop() {
-            None => return balances.get(root).cloned().unwrap_or_default(),
+            None => return Ok(balances.get(root).cloned().unwrap_or_default()),
             Some(x) => x,
         };
         if !visit_node.children_visited {
@@ -62,7 +62,7 @@ where
                     visited_branch: visited_branch.clone(),
                 },
             ));
-            for v in tree.children(&user).await {
+            for v in tree.children(&user).await? {
                 // Skip nodes that have already been visited to avoid cycles in the tree traversal
                 if visited_branch.contains(&v) {
                     continue;
@@ -79,7 +79,7 @@ where
         }
         let user_balance = tree
             .exit_node(&user, &visit_node.visited_branch, &balances)
-            .await;
+            .await?;
         balances.insert(user, user_balance);
     }
 }
