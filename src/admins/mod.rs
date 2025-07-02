@@ -46,14 +46,14 @@ impl AdminStorage for InMemoryAdminStorage {
         if self.admins.read().await.contains(user) {
             return Ok(());
         }
-        Err(Error::NoAdminPriviledge)
+        Err(Error::NoAdminPrivilege)
     }
 
     async fn is_moderator(&self, user: &UserAddress) -> Result<(), Error> {
         if self.moderators.read().await.contains(user) {
             return Ok(());
         }
-        Err(Error::NoAdminPriviledge)
+        Err(Error::NoAdminPrivilege)
     }
 
     async fn add_admin(&self, caller: &UserAddress, new_admin: UserAddress) -> Result<(), Error> {
@@ -61,7 +61,7 @@ impl AdminStorage for InMemoryAdminStorage {
         // do not use is_admin() since we want to check for admin rights and
         // update admins atomically
         if !admins_lock.contains(caller) {
-            return Err(Error::NoAdminPriviledge);
+            return Err(Error::NoAdminPrivilege);
         }
         admins_lock.insert(new_admin);
         Ok(())
@@ -70,7 +70,7 @@ impl AdminStorage for InMemoryAdminStorage {
     async fn remove_admin(&self, caller: &UserAddress, admin: UserAddress) -> Result<(), Error> {
         let mut admins_lock = self.admins.write().await;
         if !admins_lock.contains(caller) {
-            return Err(Error::NoAdminPriviledge);
+            return Err(Error::NoAdminPrivilege);
         }
         admins_lock.remove(&admin);
         Ok(())
@@ -83,7 +83,7 @@ impl AdminStorage for InMemoryAdminStorage {
     ) -> Result<(), Error> {
         let admins_lock = self.admins.read().await;
         if !admins_lock.contains(caller) {
-            return Err(Error::NoAdminPriviledge);
+            return Err(Error::NoAdminPrivilege);
         }
         self.moderators.write().await.insert(moderator);
         Ok(())
@@ -96,7 +96,7 @@ impl AdminStorage for InMemoryAdminStorage {
     ) -> Result<(), Error> {
         let admins_lock = self.admins.read().await;
         if !admins_lock.contains(caller) {
-            return Err(Error::NoAdminPriviledge);
+            return Err(Error::NoAdminPrivilege);
         }
         self.moderators.write().await.remove(&moderator);
         Ok(())
