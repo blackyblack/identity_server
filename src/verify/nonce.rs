@@ -17,7 +17,6 @@ pub trait NonceManager: Send + Sync {
 #[derive(Default)]
 pub struct InMemoryNonceManager {
     used_nonce: Mutex<HashMap<UserAddress, u64>>,
-    next_nonces: Mutex<HashMap<UserAddress, u64>>,
 }
 
 #[async_trait]
@@ -37,14 +36,14 @@ impl NonceManager for InMemoryNonceManager {
     }
 
     async fn nonce(&self, user: &UserAddress) -> Result<u64, Error> {
-        let next_nonces_lock = self.next_nonces.lock().expect("Should acquire lock");
-        Ok(next_nonces_lock.get(user).copied().unwrap_or_default())
+        let used_nonce_lock = self.used_nonce.lock().expect("Should acquire lock");
+        Ok(used_nonce_lock.get(user).copied().unwrap_or_default())
     }
 
     async fn next_nonce(&self, user: &UserAddress) -> Result<u64, Error> {
-        let mut next_nonces_lock = self.next_nonces.lock().expect("Should acquire lock");
-        let next_nonce = next_nonces_lock.entry(user.clone()).or_insert(0);
-        *next_nonce += 1;
-        Ok(*next_nonce)
+        self.nonce(user)
+            .await?
+            .checked_add(1)
+            .ok_or(Error::NonceOverflowError)
     }
 }
