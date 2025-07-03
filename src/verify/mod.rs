@@ -8,6 +8,7 @@ pub mod error;
 pub mod forget;
 pub mod moderator;
 pub mod nonce;
+pub mod nonce_db;
 pub mod proof;
 pub mod punish;
 pub mod signature;
