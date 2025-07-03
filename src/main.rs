@@ -9,7 +9,7 @@ use identity_server::{
     admins::InMemoryAdminStorage,
     identity::IdentityService,
     routes::{self, State},
-    verify::nonce::InMemoryNonceManager,
+    verify::nonce_db::DatabaseNonceManager,
 };
 use tide::Server;
 
@@ -31,10 +31,21 @@ async fn main() -> Result<(), Error> {
         .init();
     let admins = HashSet::new();
     let moderators = HashSet::new();
+
+    let db_user = env::var("MYSQL_USER").unwrap_or_else(|_| "root".into());
+    let db_password = env::var("MYSQL_PASSWORD").unwrap_or_default();
+    let db_host = env::var("MYSQL_HOST").unwrap_or_else(|_| "localhost".into());
+    let db_port = env::var("MYSQL_PORT").unwrap_or_else(|_| "3306".into());
+    let db_name = env::var("MYSQL_DATABASE").unwrap_or_else(|_| "identity".into());
+    let db_url = format!("mysql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}");
+    let nonce_manager = DatabaseNonceManager::new(&db_url)
+        .await
+        .map_err(|e| Error::new(std::io::ErrorKind::Other, e))?;
+
     let state = State {
         identity_service: IdentityService::default(),
         admin_storage: Arc::new(InMemoryAdminStorage::new(admins, moderators)),
-        nonce_manager: Arc::new(InMemoryNonceManager::default()),
+        nonce_manager: Arc::new(nonce_manager),
     };
     log::info!("Starting identity server");
     start_server(state).await
