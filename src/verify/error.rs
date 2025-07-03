@@ -16,6 +16,8 @@ pub enum Error {
     AddressParseError(String),
     #[error("Nonce already used: {0}")]
     NonceUsedError(u64),
+    #[error("Nonce limit reached")]
+    NonceOverflowError,
     #[error("Database error: {0}")]
     DatabaseError(#[from] sqlx::Error),
 }

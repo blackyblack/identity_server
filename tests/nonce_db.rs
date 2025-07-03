@@ -9,16 +9,16 @@ async fn test_database_nonce_manager() {
 
     // initial nonce should be 0
     assert_eq!(manager.nonce(&user).await.unwrap(), 0);
+    // next nonce should be 1
+    assert_eq!(manager.next_nonce(&user).await.unwrap(), 1);
+    // nonce should still be 0 until we use it
+    assert_eq!(manager.nonce(&user).await.unwrap(), 0);
 
-    let n1 = manager.next_nonce(&user).await.unwrap();
-    assert_eq!(n1, 1);
-    assert_eq!(manager.nonce(&user).await.unwrap(), 1);
-
-    manager.use_nonce(&user, n1).await.unwrap();
+    manager.use_nonce(&user, 1).await.unwrap();
 
     // using same nonce again should fail
-    assert!(manager.use_nonce(&user, n1).await.is_err());
+    assert!(manager.use_nonce(&user, 1).await.is_err());
+    assert_eq!(manager.next_nonce(&user).await.unwrap(), 2);
 
-    let n2 = manager.next_nonce(&user).await.unwrap();
-    assert_eq!(n2, 2);
+    assert_eq!(manager.nonce(&user).await.unwrap(), 1);
 }
