@@ -1,6 +1,7 @@
 use std::{
     collections::HashSet,
     env,
+    fs,
     io::{Error, Write},
     sync::Arc,
 };
@@ -11,10 +12,36 @@ use identity_server::{
     routes::{self, State},
     verify::nonce::InMemoryNonceManager,
 };
+use serde::Deserialize;
 use tide::Server;
 
 pub const DEFAULT_PORT: u32 = 8080;
 pub const DEFAULT_HOST: &str = "localhost";
+
+#[derive(Deserialize)]
+struct AdminConfig {
+    admins: Vec<String>,
+    moderators: Vec<String>,
+}
+
+fn load_admin_config() -> (HashSet<String>, HashSet<String>) {
+    match fs::read_to_string("admins.json") {
+        Ok(content) => match serde_json::from_str::<AdminConfig>(&content) {
+            Ok(cfg) => (
+                cfg.admins.into_iter().collect(),
+                cfg.moderators.into_iter().collect(),
+            ),
+            Err(err) => {
+                log::error!("Failed to parse admins.json: {}", err);
+                (HashSet::new(), HashSet::new())
+            }
+        },
+        Err(err) => {
+            log::warn!("Failed to read admins.json: {}", err);
+            (HashSet::new(), HashSet::new())
+        }
+    }
+}
 
 #[async_std::main]
 async fn main() -> Result<(), Error> {
@@ -29,8 +56,7 @@ async fn main() -> Result<(), Error> {
             writeln!(buf, "[{}] {}: {}", record.level(), ts, record.args())
         })
         .init();
-    let admins = HashSet::new();
-    let moderators = HashSet::new();
+    let (admins, moderators) = load_admin_config();
     let state = State {
         identity_service: IdentityService::default(),
         admin_storage: Arc::new(InMemoryAdminStorage::new(admins, moderators)),
