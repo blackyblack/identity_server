@@ -9,6 +9,7 @@ mod decay;
 pub mod error;
 pub mod forget;
 pub mod idt;
+pub mod genesis;
 pub mod proof;
 pub mod punish;
 pub mod storage;

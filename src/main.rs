@@ -7,10 +7,11 @@ use std::{
 
 use identity_server::{
     admins::InMemoryAdminStorage,
-    identity::IdentityService,
+    identity::{genesis::GenesisBalance, IdentityService},
     routes::{self, State},
     verify::nonce::InMemoryNonceManager,
 };
+use serde_json;
 use tide::Server;
 
 pub const DEFAULT_PORT: u32 = 8080;
@@ -36,6 +37,20 @@ async fn main() -> Result<(), Error> {
         admin_storage: Arc::new(InMemoryAdminStorage::new(admins, moderators)),
         nonce_manager: Arc::new(InMemoryNonceManager::default()),
     };
+    if let Ok(genesis) = std::fs::read_to_string("genesis.json") {
+        match serde_json::from_str::<Vec<GenesisBalance>>(&genesis) {
+            Ok(balances) => {
+                if let Err(e) = state
+                    .identity_service
+                    .apply_genesis_balances(balances)
+                    .await
+                {
+                    log::error!("failed to apply genesis balances: {e}");
+                }
+            }
+            Err(e) => log::error!("failed to parse genesis.json: {e}"),
+        }
+    }
     log::info!("Starting identity server");
     start_server(state).await
 }
