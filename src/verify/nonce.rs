@@ -1,6 +1,6 @@
 use std::collections::HashMap;
-use std::sync::Mutex;
 
+use async_std::sync::Mutex;
 use async_trait::async_trait;
 
 use crate::identity::UserAddress;
@@ -11,7 +11,6 @@ use crate::verify::error::Error;
 pub trait NonceManager: Send + Sync {
     async fn use_nonce(&self, user: &UserAddress, nonce: u64) -> Result<(), Error>;
     async fn next_nonce(&self, user: &UserAddress) -> Result<u64, Error>;
-    async fn nonce(&self, user: &UserAddress) -> Result<u64, Error>;
 }
 
 #[derive(Default)]
@@ -22,7 +21,7 @@ pub struct InMemoryNonceManager {
 #[async_trait]
 impl NonceManager for InMemoryNonceManager {
     async fn use_nonce(&self, user: &UserAddress, nonce: u64) -> Result<(), Error> {
-        let mut used_nonce_lock = self.used_nonce.lock().expect("Should acquire lock");
+        let mut used_nonce_lock = self.used_nonce.lock().await;
         let last_nonce = used_nonce_lock.entry(user.clone()).or_default();
 
         // if nonce is already used
@@ -35,14 +34,12 @@ impl NonceManager for InMemoryNonceManager {
         Ok(())
     }
 
-    async fn nonce(&self, user: &UserAddress) -> Result<u64, Error> {
-        let used_nonce_lock = self.used_nonce.lock().expect("Should acquire lock");
-        Ok(used_nonce_lock.get(user).copied().unwrap_or_default())
-    }
-
     async fn next_nonce(&self, user: &UserAddress) -> Result<u64, Error> {
-        self.nonce(user)
-            .await?
+        let used_nonce_lock = self.used_nonce.lock().await;
+        used_nonce_lock
+            .get(user)
+            .copied()
+            .unwrap_or_default()
             .checked_add(1)
             .ok_or(Error::NonceOverflowError)
     }

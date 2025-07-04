@@ -21,7 +21,6 @@ pub async fn route(mut req: Request<State>) -> tide::Result {
     let vouchee = req.param("user")?.to_string();
     let body: VouchRequest = req.body_json().await?;
     let voucher = body.from;
-    let current_nonce = req.state().nonce_manager.nonce(&voucher).await?;
     {
         let signature = Signature {
             signer: voucher.clone(),
@@ -49,7 +48,7 @@ pub async fn route(mut req: Request<State>) -> tide::Result {
         ("from".into(), voucher.into()),
         ("to".into(), vouchee.into()),
         ("idt".into(), voucher_balance.to_string().into()),
-        ("nonce".into(), current_nonce.into()),
+        ("nonce".into(), body.nonce.into()),
     ]);
     let response = Response::builder(200)
         .body(json!(response))
