@@ -1,2 +1,3 @@
 - Always use english language
 - Avoid excessive comments. Only comment tricky, hackish or incomplete code. Use TODO for missing parts of the code. Use HACK for hacks.
+- Start comments with lowercase letter.

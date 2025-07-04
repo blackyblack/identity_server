@@ -1,5 +1,5 @@
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     env,
     io::{Error, Write},
     sync::Arc,
@@ -8,7 +8,7 @@ use std::{
 use async_std::fs;
 use identity_server::{
     admins::InMemoryAdminStorage,
-    identity::IdentityService,
+    identity::{IdentityService, IdtAmount, UserAddress},
     routes::{self, State},
     verify::nonce_db::DatabaseNonceManager,
 };
@@ -24,6 +24,7 @@ pub const DEFAULT_MYSQL_PORT: u32 = 3306;
 pub const DEFAULT_MYSQL_DATABASE: &str = "identity";
 
 pub const DEFAULT_ADMINS_CONFIG_PATH: &str = "admins.json";
+pub const DEFAULT_GENESIS_PATH: &str = "genesis.json";
 
 #[derive(Deserialize, Default)]
 struct AdminConfig {
@@ -51,6 +52,13 @@ async fn main() {
             panic!("Failed to load admin configuration: {}", e);
         }
     };
+    let genesis = match load_genesis(DEFAULT_GENESIS_PATH).await {
+        Ok(genesis) => genesis,
+        Err(e) => {
+            log::error!("Failed to load genesis configuration: {:?}", e);
+            panic!("Failed to load genesis configuration: {}", e);
+        }
+    };
 
     let db_url = setup_database_url();
     let nonce_manager = match DatabaseNonceManager::new(&db_url).await {
@@ -61,11 +69,21 @@ async fn main() {
         }
     };
 
+    let identity_service = IdentityService::default();
+    identity_service
+        .set_genesis(genesis)
+        .await
+        .unwrap_or_else(|e| {
+            log::error!("Failed to set genesis balances: {:?}", e);
+            panic!("Failed to set genesis balances: {}", e);
+        });
+
     let state = State {
-        identity_service: IdentityService::default(),
+        identity_service,
         admin_storage: Arc::new(InMemoryAdminStorage::new(config.admins, config.moderators)),
         nonce_manager: Arc::new(nonce_manager),
     };
+
     log::info!("Starting identity server");
     if let Err(err) = start_server(state).await {
         log::error!("Failed to start server: {:?}", err);
@@ -83,6 +101,18 @@ async fn load_admin_config(path: &str) -> Result<AdminConfig, std::io::Error> {
     };
     let config: AdminConfig = serde_json::from_str(&content)?;
     Ok(config)
+}
+
+async fn load_genesis(path: &str) -> Result<HashMap<UserAddress, IdtAmount>, std::io::Error> {
+    let content = match fs::read_to_string(path).await {
+        Ok(content) => content,
+        Err(err) => {
+            log::warn!("Failed to read {path}: {}", err);
+            return Ok(HashMap::new());
+        }
+    };
+    let genesis: HashMap<UserAddress, IdtAmount> = serde_json::from_str(&content)?;
+    Ok(genesis)
 }
 
 fn setup_database_url() -> String {
@@ -162,6 +192,13 @@ mod tests {
         config_path
     }
 
+    async fn create_test_genesis_config(temp_dir: &TempDir, content: &str) -> PathBuf {
+        let config_path = temp_dir.path().join("genesis.json");
+        let mut file = File::create(&config_path).await.unwrap();
+        file.write_all(content.as_bytes()).await.unwrap();
+        config_path
+    }
+
     #[async_std::test]
     async fn test_load_admin_config_nonexistent_file() {
         let temp_dir = TempDir::new("config").unwrap();
@@ -214,6 +251,56 @@ mod tests {
         let temp_dir = TempDir::new("config").unwrap();
         let config_path = create_test_config(&temp_dir, "").await;
         let config_result = load_admin_config(config_path.to_str().unwrap()).await;
+        assert!(config_result.is_err());
+    }
+
+    #[async_std::test]
+    async fn test_load_genesis_config_nonexistent_file() {
+        let temp_dir = TempDir::new("config").unwrap();
+        let non_existent_path = temp_dir.path().join("nonexistent.json");
+
+        let balances = load_genesis(non_existent_path.to_str().unwrap())
+            .await
+            .unwrap();
+        assert!(balances.is_empty());
+    }
+
+    #[async_std::test]
+    async fn test_load_genesis_config_valid() {
+        let temp_dir = TempDir::new("config").unwrap();
+        let valid_content = r#"{
+            "alice": 1000,
+            "bob": 500
+        }"#;
+
+        let config_path = create_test_genesis_config(&temp_dir, valid_content).await;
+        let config_result = load_genesis(config_path.to_str().unwrap()).await;
+        assert!(config_result.is_ok());
+
+        let balances = config_result.unwrap();
+        assert_eq!(balances.len(), 2);
+        assert_eq!(balances["alice"], 1000);
+        assert_eq!(balances["bob"], 500);
+    }
+
+    #[async_std::test]
+    async fn test_load_genesis_config_invalid() {
+        let temp_dir = TempDir::new("config").unwrap();
+        let invalid_content = r#"{
+            "alice": 1000,
+            "bob"
+        }"#;
+
+        let config_path = create_test_genesis_config(&temp_dir, invalid_content).await;
+        let config_result = load_genesis(config_path.to_str().unwrap()).await;
+        assert!(config_result.is_err());
+    }
+
+    #[async_std::test]
+    async fn test_load_genesis_config_empty_file() {
+        let temp_dir = TempDir::new("config").unwrap();
+        let config_path = create_test_genesis_config(&temp_dir, "").await;
+        let config_result = load_genesis(config_path.to_str().unwrap()).await;
         assert!(config_result.is_err());
     }
 }

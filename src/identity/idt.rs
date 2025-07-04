@@ -55,12 +55,19 @@ impl Visitor for VouchTree<'_> {
         balances: &HashMap<UserAddress, IdtAmount>,
     ) -> Result<IdtAmount, Error> {
         let proven_balance = {
-            let proven_balance = match self.service.proof(node).await? {
-                None => 0,
-                Some(e) => e.amount,
-            };
-            let proven_balance_decay = proof_decay(self.service, node).await?;
-            balance_after_decay(proven_balance, proven_balance_decay)
+            match self.service.proof(node).await? {
+                // fallback to genesis balance if proof is not found
+                // genesis balance does not decay but only lasts till the first proof
+                None => self
+                    .service
+                    .genesis_balance(node)
+                    .await?
+                    .unwrap_or_default(),
+                Some(e) => {
+                    let proven_balance_decay = proof_decay(self.service, node).await?;
+                    balance_after_decay(e.amount, proven_balance_decay)
+                }
+            }
         };
 
         let top_vouchers = top_vouchers(self.service, node, visited_branch, balances).await?;

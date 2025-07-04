@@ -8,6 +8,7 @@ use crate::identity::storage::{
 mod decay;
 pub mod error;
 pub mod forget;
+pub mod genesis;
 pub mod idt;
 pub mod proof;
 pub mod punish;

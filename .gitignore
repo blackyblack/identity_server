@@ -13,4 +13,5 @@ build
 
 # Rust build directory
 target
+genesis.json
 admins.json
