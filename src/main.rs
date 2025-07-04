@@ -10,13 +10,18 @@ use identity_server::{
     admins::InMemoryAdminStorage,
     identity::IdentityService,
     routes::{self, State},
-    verify::nonce::InMemoryNonceManager,
+    verify::nonce_db::DatabaseNonceManager,
 };
 use serde::Deserialize;
 use tide::Server;
 
 pub const DEFAULT_PORT: u32 = 8080;
 pub const DEFAULT_HOST: &str = "localhost";
+
+pub const DEFAULT_MYSQL_USER: &str = "root";
+pub const DEFAULT_MYSQL_HOST: &str = "localhost";
+pub const DEFAULT_MYSQL_PORT: u32 = 3306;
+pub const DEFAULT_MYSQL_DATABASE: &str = "identity";
 
 #[derive(Deserialize)]
 struct AdminConfig {
@@ -44,7 +49,7 @@ fn load_admin_config() -> (HashSet<String>, HashSet<String>) {
 }
 
 #[async_std::main]
-async fn main() -> Result<(), Error> {
+async fn main() {
     // load environment variables from `.env` if present
     let _ = dotenv::dotenv();
     // use INFO log level by default, disable all libraries logging
@@ -57,13 +62,47 @@ async fn main() -> Result<(), Error> {
         })
         .init();
     let (admins, moderators) = load_admin_config();
+
+    let db_url = setup_database_url();
+    let nonce_manager = match DatabaseNonceManager::new(&db_url).await {
+        Ok(nonce_manager) => nonce_manager,
+        Err(e) => {
+            log::error!("Failed to connect to database: {:?}", e);
+            panic!("Failed to connect to database: {}", e);
+        }
+    };
+
     let state = State {
         identity_service: IdentityService::default(),
         admin_storage: Arc::new(InMemoryAdminStorage::new(admins, moderators)),
-        nonce_manager: Arc::new(InMemoryNonceManager::default()),
+        nonce_manager: Arc::new(nonce_manager),
     };
     log::info!("Starting identity server");
-    start_server(state).await
+    if let Err(err) = start_server(state).await {
+        log::error!("Failed to start server: {:?}", err);
+        panic!("Failed to start server: {}", err);
+    }
+}
+
+fn setup_database_url() -> String {
+    let db_user = match env::var("MYSQL_USER").unwrap_or_default().as_str() {
+        "" => DEFAULT_MYSQL_USER.to_string(),
+        user_str => user_str.to_string(),
+    };
+    let db_password = env::var("MYSQL_PASSWORD").unwrap_or_default();
+    let db_host = match env::var("MYSQL_HOST").unwrap_or_default().as_str() {
+        "" => DEFAULT_MYSQL_HOST.to_string(),
+        host_str => host_str.to_string(),
+    };
+    let db_port = match env::var("MYSQL_PORT").unwrap_or_default().as_str() {
+        "" => DEFAULT_MYSQL_PORT,
+        port_str => port_str.parse::<u32>().unwrap_or(DEFAULT_MYSQL_PORT),
+    };
+    let db_name = match env::var("MYSQL_DATABASE").unwrap_or_default().as_str() {
+        "" => DEFAULT_MYSQL_DATABASE.to_string(),
+        db_str => db_str.to_string(),
+    };
+    format!("mysql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}")
 }
 
 async fn start_server(state: State) -> Result<(), Error> {

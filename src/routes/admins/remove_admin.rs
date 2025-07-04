@@ -29,8 +29,6 @@ pub async fn route(mut req: Request<State>) -> tide::Result {
             .build());
     }
 
-    let current_nonce = req.state().nonce_manager.nonce(&sender).await?;
-
     {
         let signature = Signature {
             signer: sender.clone(),
@@ -64,7 +62,7 @@ pub async fn route(mut req: Request<State>) -> tide::Result {
     let response: HashMap<String, serde_json::Value> = HashMap::from([
         ("removed".into(), recipient.into()),
         ("from".into(), sender.into()),
-        ("nonce".into(), current_nonce.into()),
+        ("nonce".into(), body.nonce.into()),
     ]);
 
     let response = Response::builder(200)
