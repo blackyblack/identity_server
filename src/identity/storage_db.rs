@@ -22,6 +22,12 @@ impl DatabaseVouchStorage {
         )
         .execute(&pool)
         .await?;
+        sqlx::query("CREATE INDEX IF NOT EXISTS voucher_idx ON vouches(voucher)")
+            .execute(&pool)
+            .await?;
+        sqlx::query("CREATE INDEX IF NOT EXISTS vouchee_idx ON vouches(vouchee)")
+            .execute(&pool)
+            .await?;
         Ok(Self { pool })
     }
 }
