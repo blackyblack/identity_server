@@ -255,6 +255,17 @@ mod tests {
     }
 
     #[async_std::test]
+    async fn test_load_genesis_config_nonexistent_file() {
+        let temp_dir = TempDir::new("config").unwrap();
+        let non_existent_path = temp_dir.path().join("nonexistent.json");
+
+        let balances = load_genesis(non_existent_path.to_str().unwrap())
+            .await
+            .unwrap();
+        assert!(balances.is_empty());
+    }
+
+    #[async_std::test]
     async fn test_load_genesis_config_valid() {
         let temp_dir = TempDir::new("config").unwrap();
         let valid_content = r#"{
