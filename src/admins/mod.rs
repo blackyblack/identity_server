@@ -4,6 +4,7 @@ use async_trait::async_trait;
 use crate::{admins::error::Error, identity::UserAddress};
 use std::collections::HashSet;
 
+pub mod db;
 pub mod error;
 
 #[async_trait]

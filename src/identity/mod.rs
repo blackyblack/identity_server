@@ -4,6 +4,7 @@ use crate::identity::storage::{
     InMemoryPenaltyStorage, InMemoryProofStorage, InMemoryVouchStorage, PenaltyStorage,
     ProofStorage, VouchStorage,
 };
+// Database storage implementations are available in `storage_db` module
 
 mod decay;
 pub mod error;
@@ -13,6 +14,7 @@ pub mod idt;
 pub mod proof;
 pub mod punish;
 pub mod storage;
+pub mod storage_db;
 mod tree_walk;
 pub mod vouch;
 

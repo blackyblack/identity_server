@@ -79,6 +79,7 @@ pub async fn route(mut req: Request<State>) -> tide::Result {
                     .content_type(mime::JSON)
                     .build());
             }
+            _ => return Err(e.into()),
         }
     }
     let user_balance = balance(&req.state().identity_service, &user).await?;
