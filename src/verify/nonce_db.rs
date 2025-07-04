@@ -64,21 +64,17 @@ impl NonceManager for DatabaseNonceManager {
     }
 
     async fn next_nonce(&self, user: &UserAddress) -> Result<u64, Error> {
-        self.nonce(user)
-            .await?
-            .checked_add(1)
-            .ok_or(Error::NonceOverflowError)
-    }
-
-    async fn nonce(&self, user: &UserAddress) -> Result<u64, Error> {
         let row = sqlx::query("SELECT used_nonce FROM nonces WHERE user = ?")
             .bind(user)
             .fetch_optional(&self.pool)
             .await?;
         if let Some(ref r) = row {
             // does not support u64 directly, so we use i64 when reading from DB
-            return Ok(r.get::<i64, _>(0) as u64);
+            return (r.get::<i64, _>(0) as u64)
+                .checked_add(1)
+                .ok_or(Error::NonceOverflowError);
         }
-        Ok(0)
+        // first nonce is 1
+        Ok(1)
     }
 }

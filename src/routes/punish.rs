@@ -38,7 +38,6 @@ pub async fn route(mut req: Request<State>) -> tide::Result {
             .build());
     }
 
-    let current_nonce = req.state().nonce_manager.nonce(&moderator).await?;
     {
         let signature = Signature {
             signer: moderator.clone(),
@@ -77,7 +76,7 @@ pub async fn route(mut req: Request<State>) -> tide::Result {
         ("from".into(), moderator.into()),
         ("idt".into(), user_balance.to_string().into()),
         ("proof_id".into(), proof_id.to_string().into()),
-        ("nonce".into(), current_nonce.into()),
+        ("nonce".into(), body.nonce.into()),
     ]);
     let response = Response::builder(200)
         .body(json!(response))
