@@ -8,7 +8,7 @@ use crate::routes::State;
 // async is required by tide server
 pub async fn route(req: Request<State>) -> tide::Result {
     let user = req.param("user")?.to_string();
-    let is_admin = req.state().admin_storage.is_admin(&user).await.is_ok();
+    let is_admin = req.state().admin_storage.check_admin(&user).await.is_ok();
     let response: HashMap<String, serde_json::Value> = HashMap::from([
         ("user".into(), user.into()),
         ("is_admin".into(), is_admin.into()),

@@ -14,6 +14,8 @@ pub mod punish;
 pub mod signature;
 pub mod vouch;
 
+pub type Nonce = u64;
+
 pub fn address_to_string(address: &H160) -> String {
     format!("0x{}", hex::encode(address.as_bytes()))
 }

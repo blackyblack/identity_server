@@ -7,14 +7,14 @@ use tide::{Request, Response, http::mime};
 use crate::{
     identity::{UserAddress, idt::balance, vouch::vouch},
     routes::State,
-    verify::{signature::Signature, vouch::vouch_verify},
+    verify::{Nonce, signature::Signature, vouch::vouch_verify},
 };
 
 #[derive(Deserialize)]
 struct VouchRequest {
     from: UserAddress,
     signature: String,
-    nonce: u64,
+    nonce: Nonce,
 }
 
 pub async fn route(mut req: Request<State>) -> tide::Result {

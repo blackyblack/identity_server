@@ -2,6 +2,8 @@ use ethers_core::types::SignatureError;
 use ethers_signers::WalletError;
 use hex::FromHexError;
 
+use crate::verify::Nonce;
+
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
     #[error("Hex decode error: {0}")]
@@ -15,7 +17,7 @@ pub enum Error {
     #[error("Address parsing failed: {0}")]
     AddressParseError(String),
     #[error("Nonce already used: {0}")]
-    NonceUsedError(u64),
+    NonceUsedError(Nonce),
     #[error("Nonce limit reached")]
     NonceOverflowError,
     #[error("Database error: {0}")]

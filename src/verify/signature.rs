@@ -6,18 +6,24 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     identity::UserAddress,
-    verify::{error::Error, nonce::NonceManager, private_key_to_address, private_key_to_wallet},
+    verify::{
+        Nonce, error::Error, nonce::NonceManager, private_key_to_address, private_key_to_wallet,
+    },
 };
 
 #[derive(Deserialize, Serialize, Clone)]
 pub struct Signature {
     pub signer: UserAddress,
     pub signature: String,
-    pub nonce: u64,
+    pub nonce: Nonce,
 }
 
 impl Signature {
-    pub async fn generate(private_key_hex: &str, message: &str, nonce: u64) -> Result<Self, Error> {
+    pub async fn generate(
+        private_key_hex: &str,
+        message: &str,
+        nonce: Nonce,
+    ) -> Result<Self, Error> {
         let signer = private_key_to_address(private_key_hex)?;
         let wallet = private_key_to_wallet(private_key_hex)?;
         let eth_signature = wallet.sign_message(message).await?;

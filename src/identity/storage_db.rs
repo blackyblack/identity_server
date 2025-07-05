@@ -1,10 +1,12 @@
+use std::collections::HashMap;
+
 use async_trait::async_trait;
 use sqlx::any::AnyPoolOptions;
 use sqlx::{Acquire, AnyPool, Row};
 
 use crate::identity::error::Error;
 use crate::identity::storage::{PenaltyStorage, ProofStorage, VouchStorage};
-use crate::identity::{IdtAmount, ModeratorProof, SystemPenalty, UserAddress};
+use crate::identity::{IdtAmount, ModeratorProof, ProofId, SystemPenalty, UserAddress};
 
 pub struct DatabaseVouchStorage {
     pool: AnyPool,
@@ -41,6 +43,7 @@ impl VouchStorage for DatabaseVouchStorage {
             .bind(&to)
             .fetch_optional(tx.acquire().await?)
             .await?;
+        // do not use upsert to support SQLite
         if row.is_some() {
             sqlx::query("UPDATE vouches SET timestamp = ? WHERE voucher = ? AND vouchee = ?")
                 .bind(timestamp as i64)
@@ -63,21 +66,22 @@ impl VouchStorage for DatabaseVouchStorage {
     async fn vouchers_with_time(
         &self,
         user: &UserAddress,
-    ) -> Result<std::collections::HashMap<UserAddress, u64>, Error> {
+    ) -> Result<HashMap<UserAddress, u64>, Error> {
         let rows = sqlx::query("SELECT voucher, timestamp FROM vouches WHERE vouchee = ?")
             .bind(user)
             .fetch_all(&self.pool)
             .await?;
-        Ok(rows
+        let vouchers = rows
             .into_iter()
             .map(|r| (r.get::<String, _>(0), r.get::<i64, _>(1) as u64))
-            .collect())
+            .collect();
+        Ok(vouchers)
     }
 
     async fn vouchees_with_time(
         &self,
         user: &UserAddress,
-    ) -> Result<std::collections::HashMap<UserAddress, u64>, Error> {
+    ) -> Result<HashMap<UserAddress, u64>, Error> {
         let rows = sqlx::query("SELECT vouchee, timestamp FROM vouches WHERE voucher = ?")
             .bind(user)
             .fetch_all(&self.pool)
@@ -125,10 +129,7 @@ impl DatabaseProofStorage {
 
 #[async_trait]
 impl ProofStorage for DatabaseProofStorage {
-    async fn set_genesis(
-        &self,
-        users: std::collections::HashMap<UserAddress, IdtAmount>,
-    ) -> Result<(), Error> {
+    async fn set_genesis(&self, users: HashMap<UserAddress, IdtAmount>) -> Result<(), Error> {
         let mut tx = self.pool.begin().await?;
         sqlx::query("DELETE FROM genesis")
             .execute(tx.acquire().await?)
@@ -149,11 +150,12 @@ impl ProofStorage for DatabaseProofStorage {
             .bind(user)
             .fetch_optional(&self.pool)
             .await?;
-        Ok(row.map(|r| r.get::<i64, _>(0) as u128))
+        Ok(row.map(|r| r.get::<i64, _>(0) as IdtAmount))
     }
 
     async fn set_proof(&self, user: UserAddress, proof: ModeratorProof) -> Result<(), Error> {
         let mut tx = self.pool.begin().await?;
+        // this checks for user record
         let row = sqlx::query("SELECT user FROM proofs WHERE user = ?")
             .bind(&user)
             .fetch_optional(tx.acquire().await?)
@@ -189,8 +191,8 @@ impl ProofStorage for DatabaseProofStorage {
                 .await?;
         Ok(row.map(|r| ModeratorProof {
             moderator: r.get::<String, _>(0),
-            amount: r.get::<i64, _>(1) as u128,
-            proof_id: r.get::<i64, _>(2) as u128,
+            amount: r.get::<i64, _>(1) as IdtAmount,
+            proof_id: r.get::<i64, _>(2) as ProofId,
             timestamp: r.get::<i64, _>(3) as u64,
         }))
     }
@@ -217,6 +219,9 @@ impl DatabasePenaltyStorage {
         )
         .execute(&pool)
         .await?;
+        sqlx::query("CREATE INDEX IF NOT EXISTS forget_penalties_idx ON forget_penalties(user)")
+            .execute(&pool)
+            .await?;
         Ok(Self { pool })
     }
 }
@@ -229,6 +234,7 @@ impl PenaltyStorage for DatabasePenaltyStorage {
         proof: ModeratorProof,
     ) -> Result<(), Error> {
         let mut tx = self.pool.begin().await?;
+        // this checks for user record
         let row = sqlx::query("SELECT user FROM moderator_penalties WHERE user = ?")
             .bind(&user)
             .fetch_optional(tx.acquire().await?)
@@ -312,8 +318,8 @@ impl PenaltyStorage for DatabasePenaltyStorage {
         .await?;
         Ok(row.map(|r| ModeratorProof {
             moderator: r.get::<String, _>(0),
-            amount: r.get::<i64, _>(1) as u128,
-            proof_id: r.get::<i64, _>(2) as u128,
+            amount: r.get::<i64, _>(1) as IdtAmount,
+            proof_id: r.get::<i64, _>(2) as ProofId,
             timestamp: r.get::<i64, _>(3) as u64,
         }))
     }
@@ -331,7 +337,7 @@ impl PenaltyStorage for DatabasePenaltyStorage {
         .fetch_optional(&self.pool)
         .await?;
         Ok(row.map(|r| SystemPenalty {
-            amount: r.get::<i64, _>(0) as u128,
+            amount: r.get::<i64, _>(0) as IdtAmount,
             timestamp: r.get::<i64, _>(1) as u64,
         }))
     }

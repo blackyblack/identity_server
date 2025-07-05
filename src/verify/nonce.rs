@@ -4,23 +4,24 @@ use async_std::sync::Mutex;
 use async_trait::async_trait;
 
 use crate::identity::UserAddress;
+use crate::verify::Nonce;
 use crate::verify::error::Error;
 
 // Manages signature nonces to prevent replay attacks
 #[async_trait]
 pub trait NonceManager: Send + Sync {
-    async fn use_nonce(&self, user: &UserAddress, nonce: u64) -> Result<(), Error>;
-    async fn next_nonce(&self, user: &UserAddress) -> Result<u64, Error>;
+    async fn use_nonce(&self, user: &UserAddress, nonce: Nonce) -> Result<(), Error>;
+    async fn next_nonce(&self, user: &UserAddress) -> Result<Nonce, Error>;
 }
 
 #[derive(Default)]
 pub struct InMemoryNonceManager {
-    used_nonce: Mutex<HashMap<UserAddress, u64>>,
+    used_nonce: Mutex<HashMap<UserAddress, Nonce>>,
 }
 
 #[async_trait]
 impl NonceManager for InMemoryNonceManager {
-    async fn use_nonce(&self, user: &UserAddress, nonce: u64) -> Result<(), Error> {
+    async fn use_nonce(&self, user: &UserAddress, nonce: Nonce) -> Result<(), Error> {
         let mut used_nonce_lock = self.used_nonce.lock().await;
         let last_nonce = used_nonce_lock.entry(user.clone()).or_default();
 
@@ -34,7 +35,7 @@ impl NonceManager for InMemoryNonceManager {
         Ok(())
     }
 
-    async fn next_nonce(&self, user: &UserAddress) -> Result<u64, Error> {
+    async fn next_nonce(&self, user: &UserAddress) -> Result<Nonce, Error> {
         let used_nonce_lock = self.used_nonce.lock().await;
         used_nonce_lock
             .get(user)

@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use async_trait::async_trait;
 use sqlx::AnyPool;
 use sqlx::any::AnyPoolOptions;
@@ -12,8 +14,8 @@ pub struct DatabaseAdminStorage {
 impl DatabaseAdminStorage {
     pub async fn new(
         url: &str,
-        admins: impl IntoIterator<Item = UserAddress>,
-        moderators: impl IntoIterator<Item = UserAddress>,
+        admins: HashSet<UserAddress>,
+        moderators: HashSet<UserAddress>,
     ) -> Result<Self, Error> {
         sqlx::any::install_default_drivers();
         let pool = AnyPoolOptions::new()
@@ -44,32 +46,30 @@ impl DatabaseAdminStorage {
 
 #[async_trait]
 impl AdminStorage for DatabaseAdminStorage {
-    async fn is_admin(&self, user: &UserAddress) -> Result<(), Error> {
+    async fn check_admin(&self, user: &UserAddress) -> Result<(), Error> {
         let row = sqlx::query("SELECT user FROM admins WHERE user = ?")
             .bind(user)
             .fetch_optional(&self.pool)
             .await?;
         if row.is_some() {
-            Ok(())
-        } else {
-            Err(Error::NoAdminPrivilege)
+            return Ok(());
         }
+        Err(Error::NoAdminPrivilege)
     }
 
-    async fn is_moderator(&self, user: &UserAddress) -> Result<(), Error> {
+    async fn check_moderator(&self, user: &UserAddress) -> Result<(), Error> {
         let row = sqlx::query("SELECT user FROM moderators WHERE user = ?")
             .bind(user)
             .fetch_optional(&self.pool)
             .await?;
         if row.is_some() {
-            Ok(())
-        } else {
-            Err(Error::NoAdminPrivilege)
+            return Ok(());
         }
+        Err(Error::NoModeratorPrivilege)
     }
 
     async fn add_admin(&self, caller: &UserAddress, new_admin: UserAddress) -> Result<(), Error> {
-        self.is_admin(caller).await?;
+        self.check_admin(caller).await?;
         sqlx::query("INSERT OR IGNORE INTO admins (user) VALUES (?)")
             .bind(new_admin)
             .execute(&self.pool)
@@ -78,7 +78,7 @@ impl AdminStorage for DatabaseAdminStorage {
     }
 
     async fn remove_admin(&self, caller: &UserAddress, admin: UserAddress) -> Result<(), Error> {
-        self.is_admin(caller).await?;
+        self.check_admin(caller).await?;
         sqlx::query("DELETE FROM admins WHERE user = ?")
             .bind(admin)
             .execute(&self.pool)
@@ -91,7 +91,7 @@ impl AdminStorage for DatabaseAdminStorage {
         caller: &UserAddress,
         moderator: UserAddress,
     ) -> Result<(), Error> {
-        self.is_admin(caller).await?;
+        self.check_admin(caller).await?;
         sqlx::query("INSERT OR IGNORE INTO moderators (user) VALUES (?)")
             .bind(moderator)
             .execute(&self.pool)
@@ -104,7 +104,7 @@ impl AdminStorage for DatabaseAdminStorage {
         caller: &UserAddress,
         moderator: UserAddress,
     ) -> Result<(), Error> {
-        self.is_admin(caller).await?;
+        self.check_admin(caller).await?;
         sqlx::query("DELETE FROM moderators WHERE user = ?")
             .bind(moderator)
             .execute(&self.pool)

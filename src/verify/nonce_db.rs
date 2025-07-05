@@ -3,6 +3,7 @@ use sqlx::any::AnyPoolOptions;
 use sqlx::{Acquire, AnyPool, Row};
 
 use crate::identity::UserAddress;
+use crate::verify::Nonce;
 use crate::verify::error::Error;
 use crate::verify::nonce::NonceManager;
 
@@ -28,7 +29,7 @@ impl DatabaseNonceManager {
 
 #[async_trait]
 impl NonceManager for DatabaseNonceManager {
-    async fn use_nonce(&self, user: &UserAddress, nonce: u64) -> Result<(), Error> {
+    async fn use_nonce(&self, user: &UserAddress, nonce: Nonce) -> Result<(), Error> {
         // start a transaction for atomic operations
         let mut tx = self.pool.begin().await?;
         let row = sqlx::query("SELECT used_nonce FROM nonces WHERE user = ?")
@@ -38,7 +39,7 @@ impl NonceManager for DatabaseNonceManager {
 
         let mut used = 0;
         if let Some(ref r) = row {
-            used = r.get::<i64, _>(0) as u64;
+            used = r.get::<i64, _>(0) as Nonce;
         }
 
         if used >= nonce {
@@ -63,14 +64,14 @@ impl NonceManager for DatabaseNonceManager {
         Ok(())
     }
 
-    async fn next_nonce(&self, user: &UserAddress) -> Result<u64, Error> {
+    async fn next_nonce(&self, user: &UserAddress) -> Result<Nonce, Error> {
         let row = sqlx::query("SELECT used_nonce FROM nonces WHERE user = ?")
             .bind(user)
             .fetch_optional(&self.pool)
             .await?;
         if let Some(ref r) = row {
             // does not support u64 directly, so we use i64 when reading from DB
-            return (r.get::<i64, _>(0) as u64)
+            return (r.get::<i64, _>(0) as Nonce)
                 .checked_add(1)
                 .ok_or(Error::NonceOverflowError);
         }

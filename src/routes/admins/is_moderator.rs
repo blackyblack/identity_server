@@ -7,7 +7,12 @@ use crate::routes::State;
 
 pub async fn route(req: Request<State>) -> tide::Result {
     let user = req.param("user")?.to_string();
-    let is_moderator = req.state().admin_storage.is_moderator(&user).await.is_ok();
+    let is_moderator = req
+        .state()
+        .admin_storage
+        .check_moderator(&user)
+        .await
+        .is_ok();
     let response: HashMap<String, serde_json::Value> = HashMap::from([
         ("user".into(), user.into()),
         ("is_moderator".into(), is_moderator.into()),

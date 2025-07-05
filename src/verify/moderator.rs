@@ -1,6 +1,8 @@
 use crate::{
     identity::UserAddress,
-    verify::{error::Error, nonce::NonceManager, private_key_to_address, signature::Signature},
+    verify::{
+        Nonce, error::Error, nonce::NonceManager, private_key_to_address, signature::Signature,
+    },
 };
 
 pub async fn moderator_verify(
@@ -23,7 +25,7 @@ pub async fn moderator_sign(
     Signature::generate(private_key_hex, &message, nonce).await
 }
 
-fn moderator_signature_message(user: UserAddress, nonce: u64) -> String {
+fn moderator_signature_message(user: UserAddress, nonce: Nonce) -> String {
     format!("moderator/{user}/{nonce}")
 }
 

@@ -7,14 +7,14 @@ use tide::{Request, Response, http::mime};
 use crate::{
     identity::UserAddress,
     routes::State,
-    verify::{admin::admin_verify, signature::Signature},
+    verify::{Nonce, admin::admin_verify, signature::Signature},
 };
 
 #[derive(Deserialize)]
 struct AdminRequest {
     from: UserAddress,
     signature: String,
-    nonce: u64,
+    nonce: Nonce,
 }
 
 pub async fn route(mut req: Request<State>) -> tide::Result {
@@ -22,7 +22,13 @@ pub async fn route(mut req: Request<State>) -> tide::Result {
     let body: AdminRequest = req.body_json().await?;
     let sender = body.from.clone();
 
-    if req.state().admin_storage.is_admin(&sender).await.is_err() {
+    if req
+        .state()
+        .admin_storage
+        .check_admin(&sender)
+        .await
+        .is_err()
+    {
         return Ok(Response::builder(403)
             .body(json!({"error": "not admin"}))
             .content_type(mime::JSON)
@@ -131,7 +137,7 @@ mod tests {
         assert_eq!(body["nonce"], signature.nonce);
 
         // verify the user is now an admin
-        assert!(admin_storage.is_admin(&new_admin).await.is_ok());
+        assert!(admin_storage.check_admin(&new_admin).await.is_ok());
     }
 
     #[async_std::test]

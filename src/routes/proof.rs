@@ -7,7 +7,7 @@ use tide::{Request, Response, http::mime};
 use crate::{
     identity::{IdtAmount, ProofId, UserAddress, error::Error, idt::balance, proof::prove},
     routes::State,
-    verify::{proof::proof_verify, signature::Signature},
+    verify::{Nonce, proof::proof_verify, signature::Signature},
 };
 
 #[derive(Deserialize)]
@@ -16,7 +16,7 @@ struct ProofRequest {
     amount: IdtAmount,
     proof_id: ProofId,
     signature: String,
-    nonce: u64,
+    nonce: Nonce,
 }
 
 pub async fn route(mut req: Request<State>) -> tide::Result {
@@ -28,7 +28,7 @@ pub async fn route(mut req: Request<State>) -> tide::Result {
     if req
         .state()
         .admin_storage
-        .is_moderator(&moderator)
+        .check_moderator(&moderator)
         .await
         .is_err()
     {
@@ -69,19 +69,18 @@ pub async fn route(mut req: Request<State>) -> tide::Result {
     )
     .await;
 
-    if let Err(e) = prove_result {
-        match e {
-            Error::MaxBalanceExceeded => {
-                return Ok(Response::builder(400)
-                    .body(json!({
-                        "error": format!("max balance exceeded, max is {} IDT", crate::identity::proof::MAX_IDT_BY_PROOF)
-                    }))
-                    .content_type(mime::JSON)
-                    .build());
-            }
-            _ => return Err(e.into()),
-        }
+    if matches!(prove_result, Err(Error::MaxBalanceExceeded)) {
+        return Ok(Response::builder(400)
+            .body(json!({
+                "error": format!("max balance exceeded, max is {} IDT", crate::identity::proof::MAX_IDT_BY_PROOF)
+            }))
+            .content_type(mime::JSON)
+            .build());
     }
+
+    // handle other errors
+    prove_result?;
+
     let user_balance = balance(&req.state().identity_service, &user).await?;
     let response: HashMap<String, serde_json::Value> = HashMap::from([
         ("user".into(), user.into()),
