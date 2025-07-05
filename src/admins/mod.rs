@@ -4,12 +4,13 @@ use async_trait::async_trait;
 use crate::{admins::error::Error, identity::UserAddress};
 use std::collections::HashSet;
 
+pub mod db;
 pub mod error;
 
 #[async_trait]
 pub trait AdminStorage: Send + Sync {
-    async fn is_admin(&self, user: &UserAddress) -> Result<(), Error>;
-    async fn is_moderator(&self, user: &UserAddress) -> Result<(), Error>;
+    async fn check_admin(&self, user: &UserAddress) -> Result<(), Error>;
+    async fn check_moderator(&self, user: &UserAddress) -> Result<(), Error>;
     async fn add_admin(&self, caller: &UserAddress, new_admin: UserAddress) -> Result<(), Error>;
     async fn remove_admin(&self, caller: &UserAddress, admin: UserAddress) -> Result<(), Error>;
     async fn add_moderator(
@@ -42,18 +43,18 @@ impl InMemoryAdminStorage {
 
 #[async_trait]
 impl AdminStorage for InMemoryAdminStorage {
-    async fn is_admin(&self, user: &UserAddress) -> Result<(), Error> {
+    async fn check_admin(&self, user: &UserAddress) -> Result<(), Error> {
         if self.admins.read().await.contains(user) {
             return Ok(());
         }
         Err(Error::NoAdminPrivilege)
     }
 
-    async fn is_moderator(&self, user: &UserAddress) -> Result<(), Error> {
+    async fn check_moderator(&self, user: &UserAddress) -> Result<(), Error> {
         if self.moderators.read().await.contains(user) {
             return Ok(());
         }
-        Err(Error::NoAdminPrivilege)
+        Err(Error::NoModeratorPrivilege)
     }
 
     async fn add_admin(&self, caller: &UserAddress, new_admin: UserAddress) -> Result<(), Error> {
@@ -114,13 +115,13 @@ mod tests {
         let moderator = "moderator".to_string();
         let regular_user = "user".to_string();
 
-        // Add initial admin
+        // add initial admin
         storage.admins.write().await.insert(admin.clone());
 
-        // Check permissions
-        assert!(storage.is_admin(&admin).await.is_ok());
-        assert!(storage.is_admin(&moderator).await.is_err());
-        assert!(storage.is_admin(&regular_user).await.is_err());
+        // check permissions
+        assert!(storage.check_admin(&admin).await.is_ok());
+        assert!(storage.check_admin(&moderator).await.is_err());
+        assert!(storage.check_admin(&regular_user).await.is_err());
     }
 
     #[async_std::test]
@@ -130,17 +131,15 @@ mod tests {
         let moderator = "moderator".to_string();
 
         storage.admins.write().await.insert(admin.clone());
-
-        // Add moderator
         assert!(
             storage
                 .add_moderator(&admin, moderator.clone())
                 .await
                 .is_ok()
         );
-        assert!(storage.is_moderator(&moderator).await.is_ok());
+        assert!(storage.check_moderator(&moderator).await.is_ok());
 
-        // Non-admin can't add moderator
+        // non-admin can't add moderator
         let another_user = "another".to_string();
         assert!(
             storage
@@ -149,14 +148,13 @@ mod tests {
                 .is_err()
         );
 
-        // Remove moderator
         assert!(
             storage
                 .remove_moderator(&admin, moderator.clone())
                 .await
                 .is_ok()
         );
-        assert!(storage.is_moderator(&moderator).await.is_err());
+        assert!(storage.check_moderator(&moderator).await.is_err());
         assert!(!storage.moderators.read().await.contains(&moderator));
     }
 
@@ -168,11 +166,11 @@ mod tests {
 
         storage.admins.write().await.insert(admin1.clone());
 
-        // Admin can add another admin
+        // admin can add another admin
         assert!(storage.add_admin(&admin1, admin2.clone()).await.is_ok());
-        assert!(storage.is_admin(&admin2).await.is_ok());
+        assert!(storage.check_admin(&admin2).await.is_ok());
 
-        // Only admins can add admins
+        // only admins can add admins
         let non_admin = "non_admin".to_string();
         assert!(
             storage
@@ -181,9 +179,9 @@ mod tests {
                 .is_err()
         );
 
-        // Admin can remove another admin
+        // admin can remove another admin
         assert!(storage.remove_admin(&admin1, admin2.clone()).await.is_ok());
-        assert!(storage.is_admin(&admin2).await.is_err());
+        assert!(storage.check_admin(&admin2).await.is_err());
     }
 
     #[async_std::test]
@@ -193,7 +191,7 @@ mod tests {
 
         storage.admins.write().await.insert(admin.clone());
 
-        // Rremoving non-existent moderator should still return Ok
+        // removing non-existent moderator should still return Ok
         let non_existent = "non_existent".to_string();
         assert!(
             storage
@@ -217,7 +215,7 @@ mod tests {
                 .is_ok()
         );
 
-        // Moderator can't add or remove other moderators
+        // moderator can't add or remove other moderators
         assert!(
             storage
                 .add_moderator(&moderator, "new_mod".to_string())

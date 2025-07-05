@@ -7,14 +7,14 @@ use tide::{Request, Response, http::mime};
 use crate::{
     identity::{UserAddress, forget::forget, idt::balance},
     routes::State,
-    verify::{forget::forget_verify, signature::Signature},
+    verify::{Nonce, forget::forget_verify, signature::Signature},
 };
 
 #[derive(Deserialize)]
 struct ForgetRequest {
     from: UserAddress,
     signature: String,
-    nonce: u64,
+    nonce: Nonce,
 }
 
 pub async fn route(mut req: Request<State>) -> tide::Result {

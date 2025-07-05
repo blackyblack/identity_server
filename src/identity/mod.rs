@@ -13,12 +13,13 @@ pub mod idt;
 pub mod proof;
 pub mod punish;
 pub mod storage;
+pub mod storage_db;
 mod tree_walk;
 pub mod vouch;
 
 pub type UserAddress = String;
-pub type ProofId = u128;
-pub type IdtAmount = u128;
+pub type ProofId = u64;
+pub type IdtAmount = u64;
 
 #[derive(Clone)]
 pub struct ModeratorProof {

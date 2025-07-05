@@ -1,6 +1,8 @@
 use crate::{
     identity::UserAddress,
-    verify::{error::Error, nonce::NonceManager, private_key_to_address, signature::Signature},
+    verify::{
+        Nonce, error::Error, nonce::NonceManager, private_key_to_address, signature::Signature,
+    },
 };
 
 pub async fn forget_sign(
@@ -23,7 +25,7 @@ pub async fn forget_verify(
     signature.verify(&message, nonce_manager).await
 }
 
-fn forget_signature_message(user: UserAddress, nonce: u64) -> String {
+fn forget_signature_message(user: UserAddress, nonce: Nonce) -> String {
     format!("forget/{user}/{nonce}")
 }
 

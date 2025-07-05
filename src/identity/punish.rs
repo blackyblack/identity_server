@@ -17,7 +17,7 @@ use crate::identity::{
 pub const MAX_VOUCHEE_PENALTY: IdtAmount = MAX_IDT_BY_PROOF * 2;
 // vouchee's penalty is multiplied to this coefficient before adding to voucher penalty
 // stored as (numerator, denominator)
-pub const PENALTY_VOUCHEE_WEIGHT_RATIO: (u64, u64) = (1, 10);
+pub const PENALTY_VOUCHEE_WEIGHT_RATIO: (u32, u32) = (1, 10);
 pub const FORGET_PENALTY: IdtAmount = 500;
 
 struct PenaltyTree<'a> {

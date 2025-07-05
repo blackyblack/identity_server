@@ -1,6 +1,8 @@
 use crate::{
     identity::{IdtAmount, ProofId, UserAddress},
-    verify::{error::Error, nonce::NonceManager, private_key_to_address, signature::Signature},
+    verify::{
+        Nonce, error::Error, nonce::NonceManager, private_key_to_address, signature::Signature,
+    },
 };
 
 pub async fn punish_sign(
@@ -29,7 +31,7 @@ pub async fn punish_verify(
 
 fn punish_signature_message(
     user: UserAddress,
-    nonce: u64,
+    nonce: Nonce,
     amount: IdtAmount,
     proof_id: ProofId,
 ) -> String {

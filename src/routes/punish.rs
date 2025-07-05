@@ -7,7 +7,7 @@ use tide::{Request, Response, http::mime};
 use crate::{
     identity::{IdtAmount, ProofId, UserAddress, idt::balance, punish::punish},
     routes::State,
-    verify::{punish::punish_verify, signature::Signature},
+    verify::{Nonce, punish::punish_verify, signature::Signature},
 };
 
 #[derive(Deserialize)]
@@ -16,7 +16,7 @@ struct PunishRequest {
     amount: IdtAmount,
     proof_id: ProofId,
     signature: String,
-    nonce: u64,
+    nonce: Nonce,
 }
 
 pub async fn route(mut req: Request<State>) -> tide::Result {
@@ -28,7 +28,7 @@ pub async fn route(mut req: Request<State>) -> tide::Result {
     if req
         .state()
         .admin_storage
-        .is_moderator(&moderator)
+        .check_moderator(&moderator)
         .await
         .is_err()
     {

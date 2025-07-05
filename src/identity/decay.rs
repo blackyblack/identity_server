@@ -10,7 +10,7 @@ fn flat_one_idt_decay(event_timestamp: u64) -> IdtAmount {
         return 0;
     }
     // decay is 1 IDT per day
-    ((now - event_timestamp) as u128) / 60 / 60 / 24
+    (now - event_timestamp) / 60 / 60 / 24
 }
 
 pub async fn proof_decay(
