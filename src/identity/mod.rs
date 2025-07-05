@@ -13,7 +13,6 @@ pub mod idt;
 pub mod proof;
 pub mod punish;
 pub mod storage;
-pub mod storage_db;
 mod tree_walk;
 pub mod vouch;
 
@@ -38,9 +37,9 @@ pub struct SystemPenalty {
 
 #[derive(Clone)]
 pub struct IdentityService {
-    vouches: Arc<dyn VouchStorage>,
-    proofs: Arc<dyn ProofStorage>,
-    penalties: Arc<dyn PenaltyStorage>,
+    pub vouches: Arc<dyn VouchStorage>,
+    pub proofs: Arc<dyn ProofStorage>,
+    pub penalties: Arc<dyn PenaltyStorage>,
 }
 
 impl Default for IdentityService {

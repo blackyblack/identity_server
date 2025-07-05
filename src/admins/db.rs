@@ -112,3 +112,42 @@ impl AdminStorage for DatabaseAdminStorage {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[async_std::test]
+    async fn test_basic() {
+        let admin = "admin".to_string();
+        let moderator = "mod".to_string();
+        let user = "user".to_string();
+        let admins = HashSet::from([admin.clone()]);
+        let moderators = HashSet::from([moderator.clone()]);
+        let storage = DatabaseAdminStorage::new("sqlite::memory:", admins, moderators)
+            .await
+            .unwrap();
+
+        assert!(storage.check_admin(&admin).await.is_ok());
+        assert!(storage.check_admin(&user).await.is_err());
+        assert!(storage.check_admin(&moderator).await.is_err());
+        assert!(storage.check_moderator(&moderator).await.is_ok());
+        assert!(storage.check_moderator(&user).await.is_err());
+        assert!(storage.check_moderator(&admin).await.is_err());
+
+        let admin2 = "admin2".to_string();
+        storage.add_admin(&admin, admin2.clone()).await.unwrap();
+        assert!(storage.check_admin(&admin2).await.is_ok());
+        storage.remove_admin(&admin, admin2.clone()).await.unwrap();
+        assert!(storage.check_admin(&admin2).await.is_err());
+
+        let mod2 = "mod2".to_string();
+        storage.add_moderator(&admin, mod2.clone()).await.unwrap();
+        assert!(storage.check_moderator(&mod2).await.is_ok());
+        storage
+            .remove_moderator(&admin, mod2.clone())
+            .await
+            .unwrap();
+        assert!(storage.check_moderator(&mod2).await.is_err());
+    }
+}

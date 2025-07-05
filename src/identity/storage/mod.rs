@@ -7,6 +7,10 @@ use crate::identity::IdtAmount;
 
 use super::{ModeratorProof, SystemPenalty, UserAddress, error::Error};
 
+pub mod proof;
+pub mod punish;
+pub mod vouch;
+
 #[async_trait]
 pub trait VouchStorage: Send + Sync {
     async fn vouch(&self, from: UserAddress, to: UserAddress, timestamp: u64) -> Result<(), Error>;
@@ -145,12 +149,12 @@ impl ProofStorage for InMemoryProofStorage {
 
 #[async_trait]
 pub trait PenaltyStorage: Send + Sync {
-    async fn insert_moderator_penalty(
+    async fn set_moderator_penalty(
         &self,
         user: UserAddress,
         proof: ModeratorProof,
     ) -> Result<(), Error>;
-    async fn insert_forgotten_penalty(
+    async fn set_forgotten_penalty(
         &self,
         user: UserAddress,
         vouchee: UserAddress,
@@ -183,7 +187,7 @@ pub struct InMemoryPenaltyStorage {
 
 #[async_trait]
 impl PenaltyStorage for InMemoryPenaltyStorage {
-    async fn insert_moderator_penalty(
+    async fn set_moderator_penalty(
         &self,
         user: UserAddress,
         proof: ModeratorProof,
@@ -192,7 +196,7 @@ impl PenaltyStorage for InMemoryPenaltyStorage {
         Ok(())
     }
 
-    async fn insert_forgotten_penalty(
+    async fn set_forgotten_penalty(
         &self,
         user: UserAddress,
         vouchee: UserAddress,

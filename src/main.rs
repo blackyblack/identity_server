@@ -7,8 +7,14 @@ use std::{
 
 use async_std::fs;
 use identity_server::{
-    admins::InMemoryAdminStorage,
-    identity::{IdentityService, IdtAmount, UserAddress},
+    admins::db::DatabaseAdminStorage,
+    identity::{
+        IdentityService, IdtAmount, UserAddress,
+        storage::{
+            proof::DatabaseProofStorage, punish::DatabasePenaltyStorage,
+            vouch::DatabaseVouchStorage,
+        },
+    },
     routes::{self, State},
     verify::nonce_db::DatabaseNonceManager,
 };
@@ -69,7 +75,44 @@ async fn main() {
         }
     };
 
-    let identity_service = IdentityService::default();
+    let admin_storage =
+        match DatabaseAdminStorage::new(&db_url, config.admins, config.moderators).await {
+            Ok(admin_storage) => admin_storage,
+            Err(e) => {
+                log::error!("Failed to connect to database: {:?}", e);
+                panic!("Failed to connect to database: {}", e);
+            }
+        };
+
+    let vouch_storage = match DatabaseVouchStorage::new(&db_url).await {
+        Ok(vouch_storage) => vouch_storage,
+        Err(e) => {
+            log::error!("Failed to connect to database: {:?}", e);
+            panic!("Failed to connect to database: {}", e);
+        }
+    };
+
+    let proof_storage = match DatabaseProofStorage::new(&db_url).await {
+        Ok(proof_storage) => proof_storage,
+        Err(e) => {
+            log::error!("Failed to connect to database: {:?}", e);
+            panic!("Failed to connect to database: {}", e);
+        }
+    };
+
+    let penalty_storage = match DatabasePenaltyStorage::new(&db_url).await {
+        Ok(penalty_storage) => penalty_storage,
+        Err(e) => {
+            log::error!("Failed to connect to database: {:?}", e);
+            panic!("Failed to connect to database: {}", e);
+        }
+    };
+
+    let identity_service = IdentityService {
+        vouches: Arc::new(vouch_storage),
+        proofs: Arc::new(proof_storage),
+        penalties: Arc::new(penalty_storage),
+    };
     identity_service
         .set_genesis(genesis)
         .await
@@ -80,7 +123,7 @@ async fn main() {
 
     let state = State {
         identity_service,
-        admin_storage: Arc::new(InMemoryAdminStorage::new(config.admins, config.moderators)),
+        admin_storage: Arc::new(admin_storage),
         nonce_manager: Arc::new(nonce_manager),
     };
 
