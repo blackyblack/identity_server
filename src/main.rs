@@ -1,22 +1,21 @@
 use std::{
     collections::{HashMap, HashSet},
     env,
-    io::{Error, Write},
+    io::{Error, ErrorKind, Write},
     sync::Arc,
 };
 
 use async_std::fs;
 use identity_server::{
-    admins::db::DatabaseAdminStorage,
+    admins::{AdminStorage, db::DatabaseAdminStorage},
     identity::{
         IdentityService, IdtAmount, UserAddress,
-        storage::{
-            proof::DatabaseProofStorage, punish::DatabasePenaltyStorage,
-            vouch::DatabaseVouchStorage,
-        },
+        proof::{db::DatabaseProofStorage, storage::ProofStorage},
+        punish::{db::DatabasePenaltyStorage, storage::PenaltyStorage},
+        vouch::{db::DatabaseVouchStorage, storage::VouchStorage},
     },
     routes::{self, State},
-    verify::nonce_db::DatabaseNonceManager,
+    verify::nonce::{NonceManager, db::DatabaseNonceManager},
 };
 use serde::Deserialize;
 use tide::Server;
@@ -36,6 +35,14 @@ pub const DEFAULT_GENESIS_PATH: &str = "genesis.json";
 struct AdminConfig {
     admins: HashSet<String>,
     moderators: HashSet<String>,
+}
+
+struct Storage {
+    vouch_storage: Arc<dyn VouchStorage>,
+    proof_storage: Arc<dyn ProofStorage>,
+    penalty_storage: Arc<dyn PenaltyStorage>,
+    admin_storage: Arc<dyn AdminStorage>,
+    nonce_manager: Arc<dyn NonceManager>,
 }
 
 #[async_std::main]
@@ -65,43 +72,8 @@ async fn main() {
             panic!("Failed to load genesis configuration: {}", e);
         }
     };
-
-    let db_url = setup_database_url();
-    let nonce_manager = match DatabaseNonceManager::new(&db_url).await {
-        Ok(nonce_manager) => nonce_manager,
-        Err(e) => {
-            log::error!("Failed to connect to database: {:?}", e);
-            panic!("Failed to connect to database: {}", e);
-        }
-    };
-
-    let admin_storage =
-        match DatabaseAdminStorage::new(&db_url, config.admins, config.moderators).await {
-            Ok(admin_storage) => admin_storage,
-            Err(e) => {
-                log::error!("Failed to connect to database: {:?}", e);
-                panic!("Failed to connect to database: {}", e);
-            }
-        };
-
-    let vouch_storage = match DatabaseVouchStorage::new(&db_url).await {
-        Ok(vouch_storage) => vouch_storage,
-        Err(e) => {
-            log::error!("Failed to connect to database: {:?}", e);
-            panic!("Failed to connect to database: {}", e);
-        }
-    };
-
-    let proof_storage = match DatabaseProofStorage::new(&db_url).await {
-        Ok(proof_storage) => proof_storage,
-        Err(e) => {
-            log::error!("Failed to connect to database: {:?}", e);
-            panic!("Failed to connect to database: {}", e);
-        }
-    };
-
-    let penalty_storage = match DatabasePenaltyStorage::new(&db_url).await {
-        Ok(penalty_storage) => penalty_storage,
+    let storage = match create_storage(config).await {
+        Ok(storage) => storage,
         Err(e) => {
             log::error!("Failed to connect to database: {:?}", e);
             panic!("Failed to connect to database: {}", e);
@@ -109,9 +81,9 @@ async fn main() {
     };
 
     let identity_service = IdentityService {
-        vouches: Arc::new(vouch_storage),
-        proofs: Arc::new(proof_storage),
-        penalties: Arc::new(penalty_storage),
+        vouches: storage.vouch_storage,
+        proofs: storage.proof_storage,
+        penalties: storage.penalty_storage,
     };
     identity_service
         .set_genesis(genesis)
@@ -123,8 +95,8 @@ async fn main() {
 
     let state = State {
         identity_service,
-        admin_storage: Arc::new(admin_storage),
-        nonce_manager: Arc::new(nonce_manager),
+        admin_storage: storage.admin_storage,
+        nonce_manager: storage.nonce_manager,
     };
 
     log::info!("Starting identity server");
@@ -134,6 +106,7 @@ async fn main() {
     }
 }
 
+// load initial admins and moderators from JSON file
 async fn load_admin_config(path: &str) -> Result<AdminConfig, std::io::Error> {
     let content = match fs::read_to_string(path).await {
         Ok(content) => content,
@@ -146,6 +119,7 @@ async fn load_admin_config(path: &str) -> Result<AdminConfig, std::io::Error> {
     Ok(config)
 }
 
+// load initial balances from JSON file
 async fn load_genesis(path: &str) -> Result<HashMap<UserAddress, IdtAmount>, std::io::Error> {
     let content = match fs::read_to_string(path).await {
         Ok(content) => content,
@@ -156,6 +130,33 @@ async fn load_genesis(path: &str) -> Result<HashMap<UserAddress, IdtAmount>, std
     };
     let genesis: HashMap<UserAddress, IdtAmount> = serde_json::from_str(&content)?;
     Ok(genesis)
+}
+
+async fn create_storage(config: AdminConfig) -> Result<Storage, Error> {
+    let db_url = setup_database_url();
+    let vouch_storage_connect = DatabaseVouchStorage::new(&db_url)
+        .await
+        .map_err(|e| Error::new(ErrorKind::NotConnected, e.to_string()))?;
+    let proof_storage_connect = DatabaseProofStorage::new(&db_url)
+        .await
+        .map_err(|e| Error::new(ErrorKind::NotConnected, e.to_string()))?;
+    let penalty_storage_connect = DatabasePenaltyStorage::new(&db_url)
+        .await
+        .map_err(|e| Error::new(ErrorKind::NotConnected, e.to_string()))?;
+    let admin_storage_connect =
+        DatabaseAdminStorage::new(&db_url, config.admins, config.moderators)
+            .await
+            .map_err(|e| Error::new(ErrorKind::NotConnected, e.to_string()))?;
+    let nonce_manager = DatabaseNonceManager::new(&db_url)
+        .await
+        .map_err(|e| Error::new(ErrorKind::NotConnected, e.to_string()))?;
+    Ok(Storage {
+        vouch_storage: Arc::new(vouch_storage_connect),
+        proof_storage: Arc::new(proof_storage_connect),
+        penalty_storage: Arc::new(penalty_storage_connect),
+        admin_storage: Arc::new(admin_storage_connect),
+        nonce_manager: Arc::new(nonce_manager),
+    })
 }
 
 fn setup_database_url() -> String {

@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use async_trait::async_trait;
 use sqlx::{Acquire, AnyPool, Row, any::AnyPoolOptions};
 
-use crate::identity::{UserAddress, error::Error, storage::VouchStorage};
+use crate::identity::{UserAddress, error::Error, vouch::storage::VouchStorage};
 
 pub struct DatabaseVouchStorage {
     pool: AnyPool,

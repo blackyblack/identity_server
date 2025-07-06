@@ -4,8 +4,12 @@ use async_std::sync::Mutex;
 use async_trait::async_trait;
 
 use crate::identity::UserAddress;
-use crate::verify::Nonce;
-use crate::verify::error::Error;
+use crate::verify::nonce::error::Error;
+
+pub mod db;
+pub mod error;
+
+pub type Nonce = u64;
 
 // Manages signature nonces to prevent replay attacks
 #[async_trait]

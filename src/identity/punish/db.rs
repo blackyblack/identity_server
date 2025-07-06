@@ -3,7 +3,7 @@ use sqlx::{Acquire, AnyPool, Row, any::AnyPoolOptions};
 
 use crate::identity::{
     IdtAmount, ModeratorProof, ProofId, SystemPenalty, UserAddress, error::Error,
-    storage::PenaltyStorage,
+    punish::storage::PenaltyStorage,
 };
 
 pub struct DatabasePenaltyStorage {

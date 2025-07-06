@@ -2,6 +2,9 @@ use std::collections::HashMap;
 
 use crate::identity::{IdentityService, UserAddress, error::Error, next_timestamp};
 
+pub mod db;
+pub mod storage;
+
 impl IdentityService {
     pub async fn vouch_with_timestamp(
         &self,

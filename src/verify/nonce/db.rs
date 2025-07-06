@@ -3,9 +3,8 @@ use sqlx::any::AnyPoolOptions;
 use sqlx::{Acquire, AnyPool, Row};
 
 use crate::identity::UserAddress;
-use crate::verify::Nonce;
-use crate::verify::error::Error;
-use crate::verify::nonce::NonceManager;
+use crate::verify::nonce::error::Error;
+use crate::verify::nonce::{Nonce, NonceManager};
 
 pub struct DatabaseNonceManager {
     pool: AnyPool,

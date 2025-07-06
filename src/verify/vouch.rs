@@ -1,7 +1,10 @@
 use crate::{
     identity::UserAddress,
     verify::{
-        Nonce, error::Error, nonce::NonceManager, private_key_to_address, signature::Signature,
+        error::Error,
+        nonce::{Nonce, NonceManager},
+        private_key_to_address,
+        signature::Signature,
     },
 };
 
@@ -103,6 +106,6 @@ mod tests {
         let err = vouch_verify(&signature, vouchee, &nonce_manager)
             .await
             .unwrap_err();
-        assert!(matches!(err, Error::NonceUsedError(_)));
+        assert!(matches!(err, Error::NonceError(_)));
     }
 }

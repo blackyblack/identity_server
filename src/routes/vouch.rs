@@ -7,7 +7,7 @@ use tide::{Request, Response, http::mime};
 use crate::{
     identity::{UserAddress, idt::balance, vouch::vouch},
     routes::State,
-    verify::{Nonce, signature::Signature, vouch::vouch_verify},
+    verify::{nonce::Nonce, signature::Signature, vouch::vouch_verify},
 };
 
 #[derive(Deserialize)]

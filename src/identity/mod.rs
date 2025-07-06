@@ -1,8 +1,9 @@
 use std::{sync::Arc, time::SystemTime};
 
-use crate::identity::storage::{
-    InMemoryPenaltyStorage, InMemoryProofStorage, InMemoryVouchStorage, PenaltyStorage,
-    ProofStorage, VouchStorage,
+use crate::identity::{
+    proof::storage::{InMemoryProofStorage, ProofStorage},
+    punish::storage::{InMemoryPenaltyStorage, PenaltyStorage},
+    vouch::storage::{InMemoryVouchStorage, VouchStorage},
 };
 
 mod decay;
@@ -12,7 +13,6 @@ pub mod genesis;
 pub mod idt;
 pub mod proof;
 pub mod punish;
-pub mod storage;
 mod tree_walk;
 pub mod vouch;
 

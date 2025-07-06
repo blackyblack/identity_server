@@ -1,7 +1,10 @@
 use crate::{
     identity::{IdtAmount, ProofId, UserAddress},
     verify::{
-        Nonce, error::Error, nonce::NonceManager, private_key_to_address, signature::Signature,
+        error::Error,
+        nonce::{Nonce, NonceManager},
+        private_key_to_address,
+        signature::Signature,
     },
 };
 
@@ -138,7 +141,7 @@ mod tests {
         let err = punish_verify(&signature, user, amount, proof_id, &nonce_manager)
             .await
             .unwrap_err();
-        assert!(matches!(err, Error::NonceUsedError(_)));
+        assert!(matches!(err, Error::NonceError(_)));
     }
 
     #[async_std::test]

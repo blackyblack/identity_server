@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use sqlx::{Acquire, AnyPool, Row, any::AnyPoolOptions};
 
 use crate::identity::{
-    IdtAmount, ModeratorProof, ProofId, UserAddress, error::Error, storage::ProofStorage,
+    IdtAmount, ModeratorProof, ProofId, UserAddress, error::Error, proof::storage::ProofStorage,
 };
 
 pub struct DatabaseProofStorage {
