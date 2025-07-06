@@ -206,7 +206,6 @@ mod tests {
         assert_eq!(res.proof_id, proof2.proof_id);
         assert_eq!(res.timestamp, proof2.timestamp);
 
-        // penalty for non-existing user
         assert!(
             storage
                 .moderator_penalty(&"none".to_string())

@@ -157,7 +157,6 @@ mod tests {
         assert_eq!(res.proof_id, proof2.proof_id);
         assert_eq!(res.timestamp, proof2.timestamp);
 
-        // proof for non-existing user
         assert!(storage.proof(&"none".to_string()).await.unwrap().is_none());
     }
 }
