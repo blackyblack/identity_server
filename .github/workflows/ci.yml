@@ -7,8 +7,10 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/cache@v3
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Cache cargo registry and git
+        uses: actions/cache@v3
         with:
           path: |
             ~/.cargo/registry
@@ -16,14 +18,15 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
-      - uses: actions-rs/toolchain@v1
+      - name: Rust toolchain setup
+        uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: "1.85"
+          toolchain: "1.85.0"
           components: clippy, rustfmt
-      - name: format
+      - name: Format
         run: cargo fmt -- --check
-      - name: clippy
+      - name: Clippy
         run: cargo clippy -- -D warnings
-      - name: test
+      - name: Test
         run: cargo test --all
