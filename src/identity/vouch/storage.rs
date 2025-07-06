@@ -101,3 +101,96 @@ impl VouchStorage for InMemoryVouchStorage {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[async_std::test]
+    async fn test_inmemory_vouch_storage() {
+        let storage = InMemoryVouchStorage::default();
+        let user_a = "user_a".to_string();
+        let user_b = "user_b".to_string();
+
+        storage
+            .vouch(user_a.clone(), user_b.clone(), 1)
+            .await
+            .unwrap();
+        assert_eq!(
+            storage
+                .vouchers_with_time(&user_b)
+                .await
+                .unwrap()
+                .get(&user_a)
+                .copied()
+                .unwrap(),
+            1
+        );
+        assert_eq!(
+            storage
+                .vouchees_with_time(&user_a)
+                .await
+                .unwrap()
+                .get(&user_b)
+                .copied()
+                .unwrap(),
+            1
+        );
+        assert_eq!(
+            storage
+                .vouchers_with_time(&user_a)
+                .await
+                .unwrap()
+                .get(&user_b),
+            None
+        );
+        assert_eq!(
+            storage
+                .vouchees_with_time(&user_b)
+                .await
+                .unwrap()
+                .get(&user_a),
+            None
+        );
+
+        storage
+            .vouch(user_a.clone(), user_b.clone(), 5)
+            .await
+            .unwrap();
+        assert_eq!(
+            storage
+                .vouchers_with_time(&user_b)
+                .await
+                .unwrap()
+                .get(&user_a)
+                .copied()
+                .unwrap(),
+            5
+        );
+
+        storage
+            .remove_vouch(user_a.clone(), user_b.clone())
+            .await
+            .unwrap();
+        assert!(
+            storage
+                .vouchers_with_time(&user_b)
+                .await
+                .unwrap()
+                .is_empty()
+        );
+        assert!(
+            storage
+                .vouchees_with_time(&user_a)
+                .await
+                .unwrap()
+                .is_empty()
+        );
+
+        // removing a non-existing vouch should not fail
+        storage
+            .remove_vouch(user_a.clone(), user_b.clone())
+            .await
+            .unwrap();
+    }
+}
