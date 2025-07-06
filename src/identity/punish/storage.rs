@@ -216,5 +216,12 @@ mod tests {
                 .unwrap()
                 .is_none()
         );
+        assert!(
+            !storage
+                .forgotten_users(&user)
+                .await
+                .unwrap()
+                .contains(&vouchee)
+        );
     }
 }
