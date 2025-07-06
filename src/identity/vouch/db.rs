@@ -4,6 +4,7 @@ use async_trait::async_trait;
 use sqlx::{Acquire, AnyPool, Row, any::AnyPoolOptions};
 
 use crate::identity::{UserAddress, error::Error, vouch::storage::VouchStorage};
+use crate::migration;
 
 pub struct DatabaseVouchStorage {
     pool: AnyPool,
@@ -16,17 +17,7 @@ impl DatabaseVouchStorage {
             .max_connections(1)
             .connect(url)
             .await?;
-        sqlx::query(
-            "CREATE TABLE IF NOT EXISTS vouches (voucher TEXT NOT NULL, vouchee TEXT NOT NULL, timestamp INTEGER NOT NULL, PRIMARY KEY(voucher, vouchee))"
-        )
-        .execute(&pool)
-        .await?;
-        sqlx::query("CREATE INDEX IF NOT EXISTS voucher_idx ON vouches(voucher)")
-            .execute(&pool)
-            .await?;
-        sqlx::query("CREATE INDEX IF NOT EXISTS vouchee_idx ON vouches(vouchee)")
-            .execute(&pool)
-            .await?;
+        migration::run_migrations(&pool).await?;
         Ok(Self { pool })
     }
 }

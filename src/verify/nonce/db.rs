@@ -3,6 +3,7 @@ use sqlx::any::AnyPoolOptions;
 use sqlx::{Acquire, AnyPool, Row};
 
 use crate::identity::UserAddress;
+use crate::migration;
 use crate::verify::nonce::error::Error;
 use crate::verify::nonce::{Nonce, NonceManager};
 
@@ -17,11 +18,7 @@ impl DatabaseNonceManager {
             .max_connections(1)
             .connect(url)
             .await?;
-        sqlx::query(
-            "CREATE TABLE IF NOT EXISTS nonces (user TEXT PRIMARY KEY, used_nonce INTEGER NOT NULL)"
-        )
-        .execute(&pool)
-        .await?;
+        migration::run_migrations(&pool).await?;
         Ok(Self { pool })
     }
 }
