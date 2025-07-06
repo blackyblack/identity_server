@@ -108,7 +108,7 @@ mod tests {
     use super::*;
 
     #[async_std::test]
-    async fn test_database_proof_storage() {
+    async fn test_basic() {
         let storage = DatabaseProofStorage::new("sqlite::memory:").await.unwrap();
         let user = "user".to_string();
         let moderator = "moderator".to_string();

@@ -50,7 +50,7 @@ mod tests {
     use std::collections::HashMap;
 
     #[async_std::test]
-    async fn test_inmemory_proof_storage() {
+    async fn test_basic() {
         let storage = InMemoryProofStorage::default();
         let user = "user".to_string();
         let moderator = "moderator".to_string();

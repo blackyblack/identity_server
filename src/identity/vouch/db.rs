@@ -104,7 +104,7 @@ mod tests {
     use super::*;
 
     #[async_std::test]
-    async fn test_database_vouch_storage() {
+    async fn test_basic() {
         let storage = DatabaseVouchStorage::new("sqlite::memory:").await.unwrap();
         let user_a = "user_a".to_string();
         let user_b = "user_b".to_string();

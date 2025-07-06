@@ -121,7 +121,7 @@ mod tests {
     use super::*;
 
     #[async_std::test]
-    async fn test_inmemory_penalty_storage() {
+    async fn test_basic() {
         let storage = InMemoryPenaltyStorage::default();
         let user = "user".to_string();
         let vouchee = "vouchee".to_string();

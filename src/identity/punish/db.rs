@@ -167,7 +167,7 @@ mod tests {
     use super::*;
 
     #[async_std::test]
-    async fn test_database_penalty_storage() {
+    async fn test_basic() {
         let storage = DatabasePenaltyStorage::new("sqlite::memory:")
             .await
             .unwrap();
