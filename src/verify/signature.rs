@@ -7,7 +7,9 @@ use serde::{Deserialize, Serialize};
 use crate::{
     identity::UserAddress,
     verify::{
-        Nonce, error::Error, nonce::NonceManager, private_key_to_address, private_key_to_wallet,
+        error::Error,
+        nonce::{Nonce, NonceManager},
+        private_key_to_address, private_key_to_wallet,
     },
 };
 
@@ -46,7 +48,8 @@ impl Signature {
         eth_signature
             .verify(message, signer_address)
             .map_err(Error::SignatureVerificationFailed)?;
-        nonce_manager.use_nonce(&self.signer, self.nonce).await
+        nonce_manager.use_nonce(&self.signer, self.nonce).await?;
+        Ok(())
     }
 }
 
@@ -139,6 +142,6 @@ mod tests {
         assert!(signature.verify(message, &nonce_manager).await.is_ok());
         // second verification with the same nonce should fail
         let err = signature.verify(message, &nonce_manager).await.unwrap_err();
-        assert!(matches!(err, Error::NonceUsedError(_)));
+        assert!(matches!(err, Error::NonceError(_)));
     }
 }

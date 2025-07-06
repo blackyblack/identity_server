@@ -10,6 +10,9 @@ use crate::identity::{
     vouch::vouchees,
 };
 
+pub mod db;
+pub mod storage;
+
 // allows to ban for twice the entire balance, i.e. permanent ban. However due to penalty decay
 // IDT balance can eventually become positive.
 // It only limits vouchee penalty because we do not want to limit amount of penalties and their value
@@ -129,7 +132,7 @@ impl IdentityService {
             proof_id,
             timestamp,
         };
-        self.penalties.insert_moderator_penalty(user, event).await
+        self.penalties.set_moderator_penalty(user, event).await
     }
 
     pub async fn punish_for_forgetting_with_timestamp(
@@ -147,7 +150,7 @@ impl IdentityService {
             timestamp,
         };
         self.penalties
-            .insert_forgotten_penalty(user, vouchee, event)
+            .set_forgotten_penalty(user, vouchee, event)
             .await
     }
 

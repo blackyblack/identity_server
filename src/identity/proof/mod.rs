@@ -2,6 +2,9 @@ use crate::identity::{
     IdentityService, IdtAmount, ModeratorProof, ProofId, UserAddress, error::Error, next_timestamp,
 };
 
+pub mod db;
+pub mod storage;
+
 pub const MAX_IDT_BY_PROOF: IdtAmount = 50000;
 
 impl IdentityService {
