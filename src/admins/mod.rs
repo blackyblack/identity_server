@@ -139,11 +139,17 @@ mod tests {
         );
         assert!(storage.check_moderator(&moderator).await.is_ok());
 
-        // non-admin can't add moderator
+        // non-admin can't add or remove moderators
         let another_user = "another".to_string();
         assert!(
             storage
                 .add_moderator(&another_user, "new_mod".to_string())
+                .await
+                .is_err()
+        );
+        assert!(
+            storage
+                .remove_moderator(&another_user, moderator.clone())
                 .await
                 .is_err()
         );
@@ -170,11 +176,17 @@ mod tests {
         assert!(storage.add_admin(&admin1, admin2.clone()).await.is_ok());
         assert!(storage.check_admin(&admin2).await.is_ok());
 
-        // only admins can add admins
+        // only admins can add or remove admins
         let non_admin = "non_admin".to_string();
         assert!(
             storage
                 .add_admin(&non_admin, "new_admin".to_string())
+                .await
+                .is_err()
+        );
+        assert!(
+            storage
+                .remove_admin(&non_admin, admin2.clone())
                 .await
                 .is_err()
         );

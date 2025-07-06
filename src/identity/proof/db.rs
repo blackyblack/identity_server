@@ -108,7 +108,7 @@ mod tests {
     use super::*;
 
     #[async_std::test]
-    async fn test_database_proof_storage() {
+    async fn test_basic() {
         let storage = DatabaseProofStorage::new("sqlite::memory:").await.unwrap();
         let user = "user".to_string();
         let moderator = "moderator".to_string();
@@ -157,7 +157,6 @@ mod tests {
         assert_eq!(res.proof_id, proof2.proof_id);
         assert_eq!(res.timestamp, proof2.timestamp);
 
-        // proof for non-existing user
         assert!(storage.proof(&"none".to_string()).await.unwrap().is_none());
     }
 }

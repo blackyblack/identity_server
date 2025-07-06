@@ -115,3 +115,113 @@ impl PenaltyStorage for InMemoryPenaltyStorage {
             .collect())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[async_std::test]
+    async fn test_basic() {
+        let storage = InMemoryPenaltyStorage::default();
+        let user = "user".to_string();
+        let vouchee = "vouchee".to_string();
+
+        let proof1 = ModeratorProof {
+            moderator: "mod".to_string(),
+            amount: 1,
+            proof_id: 1,
+            timestamp: 2,
+        };
+        storage
+            .set_moderator_penalty(user.clone(), proof1.clone())
+            .await
+            .unwrap();
+        let res = storage.moderator_penalty(&user).await.unwrap().unwrap();
+        assert_eq!(res.moderator, proof1.moderator);
+        assert_eq!(res.amount, proof1.amount);
+        assert_eq!(res.proof_id, proof1.proof_id);
+        assert_eq!(res.timestamp, proof1.timestamp);
+
+        let proof2 = ModeratorProof {
+            moderator: "mod2".to_string(),
+            amount: 3,
+            proof_id: 2,
+            timestamp: 4,
+        };
+        storage
+            .set_moderator_penalty(user.clone(), proof2.clone())
+            .await
+            .unwrap();
+        let res = storage.moderator_penalty(&user).await.unwrap().unwrap();
+        assert_eq!(res.moderator, proof2.moderator);
+        assert_eq!(res.amount, proof2.amount);
+        assert_eq!(res.proof_id, proof2.proof_id);
+        assert_eq!(res.timestamp, proof2.timestamp);
+
+        assert!(
+            storage
+                .moderator_penalty(&"none".to_string())
+                .await
+                .unwrap()
+                .is_none()
+        );
+
+        let penalty1 = SystemPenalty {
+            amount: 5,
+            timestamp: 6,
+        };
+        storage
+            .set_forgotten_penalty(user.clone(), vouchee.clone(), penalty1.clone())
+            .await
+            .unwrap();
+        let res = storage
+            .forgotten_penalty(&user, &vouchee)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(res.amount, penalty1.amount);
+        assert_eq!(res.timestamp, penalty1.timestamp);
+        assert!(
+            storage
+                .forgotten_users(&user)
+                .await
+                .unwrap()
+                .contains(&vouchee)
+        );
+
+        let penalty2 = SystemPenalty {
+            amount: 7,
+            timestamp: 8,
+        };
+        storage
+            .set_forgotten_penalty(user.clone(), vouchee.clone(), penalty2.clone())
+            .await
+            .unwrap();
+        let res = storage
+            .forgotten_penalty(&user, &vouchee)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(res.amount, penalty2.amount);
+        assert_eq!(res.timestamp, penalty2.timestamp);
+
+        storage
+            .remove_forgotten(user.clone(), &vouchee)
+            .await
+            .unwrap();
+        assert!(
+            storage
+                .forgotten_penalty(&user, &vouchee)
+                .await
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            !storage
+                .forgotten_users(&user)
+                .await
+                .unwrap()
+                .contains(&vouchee)
+        );
+    }
+}

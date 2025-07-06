@@ -128,26 +128,127 @@ mod tests {
             .await
             .unwrap();
 
+        // check permissions
         assert!(storage.check_admin(&admin).await.is_ok());
         assert!(storage.check_admin(&user).await.is_err());
         assert!(storage.check_admin(&moderator).await.is_err());
         assert!(storage.check_moderator(&moderator).await.is_ok());
         assert!(storage.check_moderator(&user).await.is_err());
         assert!(storage.check_moderator(&admin).await.is_err());
+    }
 
+    #[async_std::test]
+    async fn test_admin_management() {
+        let admin = "admin".to_string();
+        let admins = HashSet::from([admin.clone()]);
+        let storage = DatabaseAdminStorage::new("sqlite::memory:", admins, HashSet::new())
+            .await
+            .unwrap();
+
+        // admin can add another admin
         let admin2 = "admin2".to_string();
         storage.add_admin(&admin, admin2.clone()).await.unwrap();
         assert!(storage.check_admin(&admin2).await.is_ok());
+
+        // only admins can add or remove admins
+        let non_admin = "non_admin".to_string();
+        assert!(
+            storage
+                .add_admin(&non_admin, "new_admin".to_string())
+                .await
+                .is_err()
+        );
+        assert!(
+            storage
+                .remove_admin(&non_admin, admin2.clone())
+                .await
+                .is_err()
+        );
+
+        // admin can remove another admin
         storage.remove_admin(&admin, admin2.clone()).await.unwrap();
         assert!(storage.check_admin(&admin2).await.is_err());
+    }
 
-        let mod2 = "mod2".to_string();
-        storage.add_moderator(&admin, mod2.clone()).await.unwrap();
-        assert!(storage.check_moderator(&mod2).await.is_ok());
-        storage
-            .remove_moderator(&admin, mod2.clone())
+    #[async_std::test]
+    async fn test_moderator_management() {
+        let admin = "admin".to_string();
+        let admins = HashSet::from([admin.clone()]);
+        let storage = DatabaseAdminStorage::new("sqlite::memory:", admins, HashSet::new())
             .await
             .unwrap();
-        assert!(storage.check_moderator(&mod2).await.is_err());
+
+        // admin can add a moderator
+        let moderator = "moderator".to_string();
+        storage
+            .add_moderator(&admin, moderator.clone())
+            .await
+            .unwrap();
+        assert!(storage.check_moderator(&moderator).await.is_ok());
+
+        // non-admin can't add or remove moderators
+        let non_admin = "non_admin".to_string();
+        assert!(
+            storage
+                .add_moderator(&non_admin, "new_mod".to_string())
+                .await
+                .is_err()
+        );
+        assert!(
+            storage
+                .remove_moderator(&non_admin, moderator.clone())
+                .await
+                .is_err()
+        );
+
+        // admin can remove a moderator
+        storage
+            .remove_moderator(&admin, moderator.clone())
+            .await
+            .unwrap();
+        assert!(storage.check_moderator(&moderator).await.is_err());
+    }
+
+    #[async_std::test]
+    async fn test_edge_cases() {
+        let admin = "admin".to_string();
+        let admins = HashSet::from([admin.clone()]);
+        let storage = DatabaseAdminStorage::new("sqlite::memory:", admins, HashSet::new())
+            .await
+            .unwrap();
+
+        // removing non-existent moderator should still return Ok
+        let non_existent = "non_existent".to_string();
+        assert!(storage.remove_moderator(&admin, non_existent).await.is_ok());
+
+        // adding existing moderator should still work
+        let moderator = "moderator".to_string();
+        assert!(
+            storage
+                .add_moderator(&admin, moderator.clone())
+                .await
+                .is_ok()
+        );
+        assert!(
+            storage
+                .add_moderator(&admin, moderator.clone())
+                .await
+                .is_ok()
+        );
+        assert!(storage.check_moderator(&moderator).await.is_ok());
+
+        // moderator can't add or remove other moderators
+        assert!(
+            storage
+                .add_moderator(&moderator, "new_mod".to_string())
+                .await
+                .is_err()
+        );
+        assert!(
+            storage
+                .remove_moderator(&moderator, "some_mod".to_string())
+                .await
+                .is_err()
+        );
     }
 }

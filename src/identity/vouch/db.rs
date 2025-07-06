@@ -104,10 +104,25 @@ mod tests {
     use super::*;
 
     #[async_std::test]
-    async fn test_database_vouch_storage() {
+    async fn test_basic() {
         let storage = DatabaseVouchStorage::new("sqlite::memory:").await.unwrap();
         let user_a = "user_a".to_string();
         let user_b = "user_b".to_string();
+
+        assert!(
+            storage
+                .vouchers_with_time(&user_b)
+                .await
+                .unwrap()
+                .is_empty()
+        );
+        assert!(
+            storage
+                .vouchees_with_time(&user_a)
+                .await
+                .unwrap()
+                .is_empty()
+        );
 
         storage
             .vouch(user_a.clone(), user_b.clone(), 1)

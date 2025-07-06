@@ -167,7 +167,7 @@ mod tests {
     use super::*;
 
     #[async_std::test]
-    async fn test_database_penalty_storage() {
+    async fn test_basic() {
         let storage = DatabasePenaltyStorage::new("sqlite::memory:")
             .await
             .unwrap();
@@ -206,7 +206,6 @@ mod tests {
         assert_eq!(res.proof_id, proof2.proof_id);
         assert_eq!(res.timestamp, proof2.timestamp);
 
-        // penalty for non-existing user
         assert!(
             storage
                 .moderator_penalty(&"none".to_string())
@@ -264,6 +263,13 @@ mod tests {
                 .await
                 .unwrap()
                 .is_none()
+        );
+        assert!(
+            !storage
+                .forgotten_users(&user)
+                .await
+                .unwrap()
+                .contains(&vouchee)
         );
     }
 }
