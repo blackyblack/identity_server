@@ -1,49 +1,18 @@
 use std::{
-    collections::{HashMap, HashSet},
     env,
-    io::{Error, ErrorKind, Write},
-    sync::Arc,
+    io::{Error, Write},
 };
 
-use async_std::fs;
 use identity_server::{
-    admins::{AdminStorage, db::DatabaseAdminStorage},
-    identity::{
-        IdentityService, IdtAmount, UserAddress,
-        proof::{db::DatabaseProofStorage, storage::ProofStorage},
-        punish::{db::DatabasePenaltyStorage, storage::PenaltyStorage},
-        vouch::{db::DatabaseVouchStorage, storage::VouchStorage},
-    },
+    config::{self, DEFAULT_CONFIG_PATH, DEFAULT_GENESIS_PATH},
+    identity::IdentityService,
     routes::{self, State},
-    verify::nonce::{NonceManager, db::DatabaseNonceManager},
+    storage,
 };
-use serde::Deserialize;
 use tide::Server;
 
 pub const DEFAULT_PORT: u32 = 8080;
 pub const DEFAULT_HOST: &str = "localhost";
-
-pub const DEFAULT_MYSQL_USER: &str = "root";
-pub const DEFAULT_MYSQL_HOST: &str = "localhost";
-pub const DEFAULT_MYSQL_PORT: u32 = 3306;
-pub const DEFAULT_MYSQL_DATABASE: &str = "identity";
-
-pub const DEFAULT_ADMINS_CONFIG_PATH: &str = "admins.json";
-pub const DEFAULT_GENESIS_PATH: &str = "genesis.json";
-
-#[derive(Deserialize, Default)]
-struct AdminConfig {
-    admins: HashSet<String>,
-    moderators: HashSet<String>,
-}
-
-struct Storage {
-    vouch_storage: Arc<dyn VouchStorage>,
-    proof_storage: Arc<dyn ProofStorage>,
-    penalty_storage: Arc<dyn PenaltyStorage>,
-    admin_storage: Arc<dyn AdminStorage>,
-    nonce_manager: Arc<dyn NonceManager>,
-}
 
 #[async_std::main]
 async fn main() {
@@ -58,21 +27,26 @@ async fn main() {
             writeln!(buf, "[{}] {}: {}", record.level(), ts, record.args())
         })
         .init();
-    let config = match load_admin_config(DEFAULT_ADMINS_CONFIG_PATH).await {
+    let config = match config::load_config(DEFAULT_CONFIG_PATH).await {
         Ok(config) => config,
         Err(e) => {
-            log::error!("Failed to load admin configuration: {:?}", e);
-            panic!("Failed to load admin configuration: {}", e);
+            log::error!("Failed to load configuration: {:?}", e);
+            panic!("Failed to load configuration: {}", e);
         }
     };
-    let genesis = match load_genesis(DEFAULT_GENESIS_PATH).await {
+    let genesis = match config::load_genesis(DEFAULT_GENESIS_PATH).await {
         Ok(genesis) => genesis,
         Err(e) => {
             log::error!("Failed to load genesis configuration: {:?}", e);
             panic!("Failed to load genesis configuration: {}", e);
         }
     };
-    let storage = match create_storage(config).await {
+    let storage = match storage::create_database_storage(
+        config.admins.admins,
+        config.admins.moderators,
+    )
+    .await
+    {
         Ok(storage) => storage,
         Err(e) => {
             log::error!("Failed to connect to database: {:?}", e);
@@ -104,80 +78,6 @@ async fn main() {
         log::error!("Failed to start server: {:?}", err);
         panic!("Failed to start server: {}", err);
     }
-}
-
-// load initial admins and moderators from JSON file
-async fn load_admin_config(path: &str) -> Result<AdminConfig, std::io::Error> {
-    let content = match fs::read_to_string(path).await {
-        Ok(content) => content,
-        Err(err) => {
-            log::warn!("Failed to read {path}: {}", err);
-            return Ok(AdminConfig::default());
-        }
-    };
-    let config: AdminConfig = serde_json::from_str(&content)?;
-    Ok(config)
-}
-
-// load initial balances from JSON file
-async fn load_genesis(path: &str) -> Result<HashMap<UserAddress, IdtAmount>, std::io::Error> {
-    let content = match fs::read_to_string(path).await {
-        Ok(content) => content,
-        Err(err) => {
-            log::warn!("Failed to read {path}: {}", err);
-            return Ok(HashMap::new());
-        }
-    };
-    let genesis: HashMap<UserAddress, IdtAmount> = serde_json::from_str(&content)?;
-    Ok(genesis)
-}
-
-async fn create_storage(config: AdminConfig) -> Result<Storage, Error> {
-    let db_url = setup_database_url();
-    let vouch_storage_connect = DatabaseVouchStorage::new(&db_url)
-        .await
-        .map_err(|e| Error::new(ErrorKind::NotConnected, e.to_string()))?;
-    let proof_storage_connect = DatabaseProofStorage::new(&db_url)
-        .await
-        .map_err(|e| Error::new(ErrorKind::NotConnected, e.to_string()))?;
-    let penalty_storage_connect = DatabasePenaltyStorage::new(&db_url)
-        .await
-        .map_err(|e| Error::new(ErrorKind::NotConnected, e.to_string()))?;
-    let admin_storage_connect =
-        DatabaseAdminStorage::new(&db_url, config.admins, config.moderators)
-            .await
-            .map_err(|e| Error::new(ErrorKind::NotConnected, e.to_string()))?;
-    let nonce_manager = DatabaseNonceManager::new(&db_url)
-        .await
-        .map_err(|e| Error::new(ErrorKind::NotConnected, e.to_string()))?;
-    Ok(Storage {
-        vouch_storage: Arc::new(vouch_storage_connect),
-        proof_storage: Arc::new(proof_storage_connect),
-        penalty_storage: Arc::new(penalty_storage_connect),
-        admin_storage: Arc::new(admin_storage_connect),
-        nonce_manager: Arc::new(nonce_manager),
-    })
-}
-
-fn setup_database_url() -> String {
-    let db_user = match env::var("MYSQL_USER").unwrap_or_default().as_str() {
-        "" => DEFAULT_MYSQL_USER.to_string(),
-        user_str => user_str.to_string(),
-    };
-    let db_password = env::var("MYSQL_PASSWORD").unwrap_or_default();
-    let db_host = match env::var("MYSQL_HOST").unwrap_or_default().as_str() {
-        "" => DEFAULT_MYSQL_HOST.to_string(),
-        host_str => host_str.to_string(),
-    };
-    let db_port = match env::var("MYSQL_PORT").unwrap_or_default().as_str() {
-        "" => DEFAULT_MYSQL_PORT,
-        port_str => port_str.parse::<u32>().unwrap_or(DEFAULT_MYSQL_PORT),
-    };
-    let db_name = match env::var("MYSQL_DATABASE").unwrap_or_default().as_str() {
-        "" => DEFAULT_MYSQL_DATABASE.to_string(),
-        db_str => db_str.to_string(),
-    };
-    format!("mysql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}")
 }
 
 async fn start_server(state: State) -> Result<(), Error> {
@@ -217,134 +117,4 @@ async fn setup_routes(server: &mut Server<State>) {
     server
         .at("/remove_moderator/:user")
         .post(routes::admins::remove_moderator::route);
-}
-
-#[cfg(test)]
-mod tests {
-    use std::path::PathBuf;
-
-    use async_std::{fs::File, io::WriteExt};
-    use tempdir::TempDir;
-
-    use super::*;
-
-    // Helper function to create a temporary file with content
-    async fn create_test_config(dir: &TempDir, content: &str) -> PathBuf {
-        let config_path = dir.path().join("admins.json");
-        let mut file = File::create(&config_path).await.unwrap();
-        file.write_all(content.as_bytes()).await.unwrap();
-        config_path
-    }
-
-    async fn create_test_genesis_config(temp_dir: &TempDir, content: &str) -> PathBuf {
-        let config_path = temp_dir.path().join("genesis.json");
-        let mut file = File::create(&config_path).await.unwrap();
-        file.write_all(content.as_bytes()).await.unwrap();
-        config_path
-    }
-
-    #[async_std::test]
-    async fn test_load_admin_config_nonexistent_file() {
-        let temp_dir = TempDir::new("config").unwrap();
-        let non_existent_path = temp_dir.path().join("nonexistent.json");
-
-        let config = load_admin_config(non_existent_path.to_str().unwrap())
-            .await
-            .unwrap();
-        assert!(config.admins.is_empty());
-        assert!(config.moderators.is_empty());
-    }
-
-    #[async_std::test]
-    async fn test_load_admin_config_valid_file() {
-        let temp_dir = TempDir::new("config").unwrap();
-        let config_content = r#"{
-            "admins": ["user1", "user2"],
-            "moderators": ["mod1", "mod2", "mod3"]
-        }"#;
-
-        let config_path = create_test_config(&temp_dir, config_content).await;
-
-        let config = load_admin_config(config_path.to_str().unwrap())
-            .await
-            .unwrap();
-        assert_eq!(config.admins.len(), 2);
-        assert!(config.admins.contains("user1"));
-        assert!(config.admins.contains("user2"));
-        assert_eq!(config.moderators.len(), 3);
-        assert!(config.moderators.contains("mod1"));
-        assert!(config.moderators.contains("mod2"));
-        assert!(config.moderators.contains("mod3"));
-    }
-
-    #[async_std::test]
-    async fn test_load_admin_config_invalid_json() {
-        let temp_dir = TempDir::new("config").unwrap();
-        let invalid_content = r#"{
-            "admins": ["user1"],
-            "moderators": ["mod1"
-        }"#;
-
-        let config_path = create_test_config(&temp_dir, invalid_content).await;
-        let config_result = load_admin_config(config_path.to_str().unwrap()).await;
-        assert!(config_result.is_err());
-    }
-
-    #[async_std::test]
-    async fn test_load_admin_config_empty_file() {
-        let temp_dir = TempDir::new("config").unwrap();
-        let config_path = create_test_config(&temp_dir, "").await;
-        let config_result = load_admin_config(config_path.to_str().unwrap()).await;
-        assert!(config_result.is_err());
-    }
-
-    #[async_std::test]
-    async fn test_load_genesis_config_nonexistent_file() {
-        let temp_dir = TempDir::new("config").unwrap();
-        let non_existent_path = temp_dir.path().join("nonexistent.json");
-
-        let balances = load_genesis(non_existent_path.to_str().unwrap())
-            .await
-            .unwrap();
-        assert!(balances.is_empty());
-    }
-
-    #[async_std::test]
-    async fn test_load_genesis_config_valid() {
-        let temp_dir = TempDir::new("config").unwrap();
-        let valid_content = r#"{
-            "alice": 1000,
-            "bob": 500
-        }"#;
-
-        let config_path = create_test_genesis_config(&temp_dir, valid_content).await;
-        let config_result = load_genesis(config_path.to_str().unwrap()).await;
-        assert!(config_result.is_ok());
-
-        let balances = config_result.unwrap();
-        assert_eq!(balances.len(), 2);
-        assert_eq!(balances["alice"], 1000);
-        assert_eq!(balances["bob"], 500);
-    }
-
-    #[async_std::test]
-    async fn test_load_genesis_config_invalid() {
-        let temp_dir = TempDir::new("config").unwrap();
-        let invalid_content = r#"{
-            "alice": 1000,
-            "bob"
-        }"#;
-
-        let config_path = create_test_genesis_config(&temp_dir, invalid_content).await;
-        let config_result = load_genesis(config_path.to_str().unwrap()).await;
-        assert!(config_result.is_err());
-    }
-
-    #[async_std::test]
-    async fn test_load_genesis_config_empty_file() {
-        let temp_dir = TempDir::new("config").unwrap();
-        let config_path = create_test_genesis_config(&temp_dir, "").await;
-        let config_result = load_genesis(config_path.to_str().unwrap()).await;
-        assert!(config_result.is_err());
-    }
 }
