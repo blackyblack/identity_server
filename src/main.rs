@@ -41,14 +41,18 @@ async fn main() {
             panic!("Failed to load genesis configuration: {}", e);
         }
     };
-    let storage =
-        match storage::create_storage(config.admins.admins, config.admins.moderators).await {
-            Ok(storage) => storage,
-            Err(e) => {
-                log::error!("Failed to connect to database: {:?}", e);
-                panic!("Failed to connect to database: {}", e);
-            }
-        };
+    let storage = match storage::create_database_storage(
+        config.admins.admins,
+        config.admins.moderators,
+    )
+    .await
+    {
+        Ok(storage) => storage,
+        Err(e) => {
+            log::error!("Failed to connect to database: {:?}", e);
+            panic!("Failed to connect to database: {}", e);
+        }
+    };
 
     let identity_service = IdentityService {
         vouches: storage.vouch_storage,

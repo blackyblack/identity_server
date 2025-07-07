@@ -5,6 +5,6 @@
   },
   "external_servers": {
     "allow_all": false,
-    "servers": []
+    "allow_servers": []
   }
 }

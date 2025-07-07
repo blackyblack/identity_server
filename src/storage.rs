@@ -29,7 +29,7 @@ pub struct Storage {
     pub nonce_manager: Arc<dyn NonceManager>,
 }
 
-pub async fn create_storage(
+pub async fn create_database_storage(
     admins: HashSet<UserAddress>,
     moderators: HashSet<UserAddress>,
 ) -> Result<Storage, Error> {
