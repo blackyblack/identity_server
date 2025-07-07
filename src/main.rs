@@ -8,6 +8,7 @@ use identity_server::{
     identity::IdentityService,
     routes::{self, State},
     storage,
+    verify::private_key_to_address,
 };
 use tide::Server;
 
@@ -27,6 +28,15 @@ async fn main() {
             writeln!(buf, "[{}] {}: {}", record.level(), ts, record.args())
         })
         .init();
+
+    if let Ok(key) = env::var("SERVER_PRIVATE_KEY") {
+        if !key.is_empty() {
+            match private_key_to_address(&key) {
+                Ok(addr) => log::info!("Server address: {}", addr),
+                Err(e) => log::error!("Invalid SERVER_PRIVATE_KEY: {:?}", e),
+            }
+        }
+    }
     let config = match config::load_config(DEFAULT_CONFIG_PATH).await {
         Ok(config) => config,
         Err(e) => {
