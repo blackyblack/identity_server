@@ -29,25 +29,19 @@ async fn main() {
         })
         .init();
 
-    if let Ok(key) = env::var("SERVER_PRIVATE_KEY") {
-        if !key.is_empty() {
-            match private_key_to_address(&key) {
-                Ok(addr) => log::info!("Server address: {}", addr),
-                Err(e) => log::error!("Invalid SERVER_PRIVATE_KEY: {:?}", e),
+    let server_private_key = match env::var("SERVER_PRIVATE_KEY") {
+        Ok(key) if !key.is_empty() => match private_key_to_address(&key) {
+            Ok(_) => key,
+            Err(e) => {
+                log::error!("Invalid SERVER_PRIVATE_KEY: {:?}", e);
+                panic!("Invalid SERVER_PRIVATE_KEY: {}", e);
             }
+        },
+        _ => {
+            log::warn!("SERVER_PRIVATE_KEY is not set or empty, generating a random key");
+            let (key, _) = random_keypair();
+            key
         }
-    }
-
-    let server_private_key = if let Ok(key) = env::var("SERVER_PRIVATE_KEY") {
-        if let Err(e) = private_key_to_address(&key) {
-            log::error!("Invalid SERVER_PRIVATE_KEY: {:?}", e);
-            panic!("Invalid SERVER_PRIVATE_KEY: {}", e);
-        }
-        key
-    } else {
-        log::warn!("SERVER_PRIVATE_KEY not set, generating a random key");
-        let (key, _) = random_keypair();
-        key
     };
     log::info!(
         "Server address: {}",
