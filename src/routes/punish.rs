@@ -92,12 +92,12 @@ mod tests {
     use super::*;
     use crate::{
         admins::InMemoryAdminStorage,
+        config::ExternalServersSection,
         identity::{
             IdentityService,
             proof::prove,
             tests::{MODERATOR, PROOF_ID, USER_A},
         },
-        config::ExternalServersSection,
         verify::{nonce::InMemoryNonceManager, punish::punish_sign, random_keypair},
     };
     use serde_json::Value;

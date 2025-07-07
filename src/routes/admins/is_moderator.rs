@@ -29,8 +29,7 @@ mod tests {
     use std::{collections::HashSet, sync::Arc};
 
     use crate::{
-        admins::InMemoryAdminStorage, identity::IdentityService,
-        config::ExternalServersSection,
+        admins::InMemoryAdminStorage, config::ExternalServersSection, identity::IdentityService,
         verify::nonce::InMemoryNonceManager,
     };
 
