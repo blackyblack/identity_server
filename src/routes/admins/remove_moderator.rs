@@ -85,9 +85,7 @@ mod tests {
 
     use crate::{
         admins::{AdminStorage, InMemoryAdminStorage},
-        config::ExternalServersSection,
-        identity::IdentityService,
-        verify::{moderator::moderator_sign, nonce::InMemoryNonceManager, random_keypair},
+        verify::{moderator::moderator_sign, random_keypair},
     };
 
     use super::*;
@@ -102,10 +100,8 @@ mod tests {
         let moderators = HashSet::from([moderator.clone()]);
         let admin_storage = Arc::new(InMemoryAdminStorage::new(admins, moderators));
         let state = State {
-            identity_service: IdentityService::default(),
             admin_storage: admin_storage.clone(),
-            nonce_manager: Arc::new(InMemoryNonceManager::default()),
-            external_servers: ExternalServersSection::default(),
+            ..Default::default()
         };
 
         let req_url = format!("/remove_moderator/{moderator}");
@@ -151,10 +147,8 @@ mod tests {
         let moderators = HashSet::from([moderator.clone()]);
         let admin_storage = Arc::new(InMemoryAdminStorage::new(admins, moderators));
         let state = State {
-            identity_service: IdentityService::default(),
-            admin_storage,
-            nonce_manager: Arc::new(InMemoryNonceManager::default()),
-            external_servers: ExternalServersSection::default(),
+            admin_storage: admin_storage.clone(),
+            ..Default::default()
         };
 
         let req_url = format!("/remove_moderator/{moderator}");

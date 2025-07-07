@@ -24,10 +24,7 @@ pub async fn route(req: Request<State>) -> tide::Result {
 mod tests {
     use std::{collections::HashSet, sync::Arc};
 
-    use crate::{
-        admins::InMemoryAdminStorage, config::ExternalServersSection, identity::IdentityService,
-        verify::nonce::InMemoryNonceManager,
-    };
+    use crate::admins::InMemoryAdminStorage;
 
     use super::*;
     use serde_json::Value;
@@ -39,10 +36,8 @@ mod tests {
         let admins = HashSet::from([admin.clone()]);
         let admin_storage = Arc::new(InMemoryAdminStorage::new(admins, HashSet::new()));
         let state = State {
-            identity_service: IdentityService::default(),
-            admin_storage,
-            nonce_manager: Arc::new(InMemoryNonceManager::default()),
-            external_servers: ExternalServersSection::default(),
+            admin_storage: admin_storage.clone(),
+            ..Default::default()
         };
 
         // test for admin user

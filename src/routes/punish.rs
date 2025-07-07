@@ -92,13 +92,11 @@ mod tests {
     use super::*;
     use crate::{
         admins::InMemoryAdminStorage,
-        config::ExternalServersSection,
         identity::{
-            IdentityService,
             proof::prove,
             tests::{MODERATOR, PROOF_ID, USER_A},
         },
-        verify::{nonce::InMemoryNonceManager, punish::punish_sign, random_keypair},
+        verify::{punish::punish_sign, random_keypair},
     };
     use serde_json::Value;
     use tide::http::{Request as HttpRequest, Response, Url};
@@ -109,10 +107,8 @@ mod tests {
         let moderators = HashSet::from([moderator.clone()]);
         let admin_storage = Arc::new(InMemoryAdminStorage::new(HashSet::new(), moderators));
         let state = State {
-            identity_service: IdentityService::default(),
-            admin_storage,
-            nonce_manager: Arc::new(InMemoryNonceManager::default()),
-            external_servers: ExternalServersSection::default(),
+            admin_storage: admin_storage.clone(),
+            ..Default::default()
         };
         let user_id = USER_A;
         let amount = 5000;
@@ -200,15 +196,11 @@ mod tests {
     async fn test_unprivileged_request() {
         // create a random keypair for a non-privileged user
         let (private_key, _) = random_keypair();
-
         let moderators = HashSet::from(["other_moderator".to_string()]);
         let admin_storage = Arc::new(InMemoryAdminStorage::new(HashSet::new(), moderators));
-
         let state = State {
-            identity_service: IdentityService::default(),
-            admin_storage,
-            nonce_manager: Arc::new(InMemoryNonceManager::default()),
-            external_servers: ExternalServersSection::default(),
+            admin_storage: admin_storage.clone(),
+            ..Default::default()
         };
 
         let target_user = "test_user".to_string();

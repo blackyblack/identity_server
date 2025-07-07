@@ -85,9 +85,7 @@ mod tests {
 
     use crate::{
         admins::{AdminStorage, InMemoryAdminStorage},
-        config::ExternalServersSection,
-        identity::IdentityService,
-        verify::{admin::admin_sign, nonce::InMemoryNonceManager, random_keypair},
+        verify::{admin::admin_sign, random_keypair},
     };
 
     use super::*;
@@ -100,10 +98,8 @@ mod tests {
         let admins = HashSet::from([admin_address.clone()]);
         let admin_storage = Arc::new(InMemoryAdminStorage::new(admins, HashSet::new()));
         let state = State {
-            identity_service: IdentityService::default(),
             admin_storage: admin_storage.clone(),
-            nonce_manager: Arc::new(InMemoryNonceManager::default()),
-            external_servers: ExternalServersSection::default(),
+            ..Default::default()
         };
 
         let new_admin = "new_admin_user".to_string();
@@ -148,10 +144,8 @@ mod tests {
         let admins = HashSet::from(["other_admin".to_string()]);
         let admin_storage = Arc::new(InMemoryAdminStorage::new(admins, HashSet::new()));
         let state = State {
-            identity_service: IdentityService::default(),
-            admin_storage,
-            nonce_manager: Arc::new(InMemoryNonceManager::default()),
-            external_servers: ExternalServersSection::default(),
+            admin_storage: admin_storage.clone(),
+            ..Default::default()
         };
 
         let new_admin = "new_admin_user".to_string();
