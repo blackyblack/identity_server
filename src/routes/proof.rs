@@ -104,11 +104,10 @@ mod tests {
     use crate::{
         admins::InMemoryAdminStorage,
         identity::{
-            IdentityService,
             proof::MAX_IDT_BY_PROOF,
             tests::{PROOF_ID, USER_A},
         },
-        verify::{nonce::InMemoryNonceManager, proof::proof_sign, random_keypair},
+        verify::{proof::proof_sign, random_keypair},
     };
     use serde_json::Value;
     use tide::http::{Request as HttpRequest, Response, Url};
@@ -119,9 +118,8 @@ mod tests {
         let moderators = HashSet::from([moderator.clone()]);
         let admin_storage = Arc::new(InMemoryAdminStorage::new(HashSet::new(), moderators));
         let state = State {
-            identity_service: IdentityService::default(),
-            admin_storage,
-            nonce_manager: Arc::new(InMemoryNonceManager::default()),
+            admin_storage: admin_storage.clone(),
+            ..Default::default()
         };
         let user_id = USER_A;
         let amount = 5000;
@@ -171,9 +169,8 @@ mod tests {
         let moderators = HashSet::from([moderator.clone()]);
         let admin_storage = Arc::new(InMemoryAdminStorage::new(HashSet::new(), moderators));
         let state = State {
-            identity_service: IdentityService::default(),
-            admin_storage,
-            nonce_manager: Arc::new(InMemoryNonceManager::default()),
+            admin_storage: admin_storage.clone(),
+            ..Default::default()
         };
         let user_id = USER_A;
         let amount = MAX_IDT_BY_PROOF + 1;
@@ -257,11 +254,9 @@ mod tests {
 
         let moderators = HashSet::from(["other_moderator".to_string()]);
         let admin_storage = Arc::new(InMemoryAdminStorage::new(HashSet::new(), moderators));
-
         let state = State {
-            identity_service: IdentityService::default(),
-            admin_storage,
-            nonce_manager: Arc::new(InMemoryNonceManager::default()),
+            admin_storage: admin_storage.clone(),
+            ..Default::default()
         };
 
         let target_user = "test_user".to_string();

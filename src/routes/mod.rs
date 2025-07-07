@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use crate::{
     admins::{AdminStorage, InMemoryAdminStorage},
+    config::ExternalServersSection,
     identity::IdentityService,
     verify::nonce::{InMemoryNonceManager, NonceManager},
 };
@@ -18,6 +19,7 @@ pub struct State {
     pub identity_service: IdentityService,
     pub admin_storage: Arc<dyn AdminStorage>,
     pub nonce_manager: Arc<dyn NonceManager>,
+    pub external_servers: ExternalServersSection,
 }
 
 impl Default for State {
@@ -26,6 +28,7 @@ impl Default for State {
             identity_service: IdentityService::default(),
             admin_storage: Arc::new(InMemoryAdminStorage::default()),
             nonce_manager: Arc::new(InMemoryNonceManager::default()),
+            external_servers: ExternalServersSection::default(),
         }
     }
 }

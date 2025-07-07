@@ -10,6 +10,7 @@ pub mod moderator;
 pub mod nonce;
 pub mod proof;
 pub mod punish;
+pub mod servers;
 pub mod signature;
 pub mod vouch;
 
