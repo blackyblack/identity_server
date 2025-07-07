@@ -97,6 +97,7 @@ mod tests {
             proof::prove,
             tests::{MODERATOR, PROOF_ID, USER_A},
         },
+        config::ExternalServersSection,
         verify::{nonce::InMemoryNonceManager, punish::punish_sign, random_keypair},
     };
     use serde_json::Value;
@@ -111,6 +112,7 @@ mod tests {
             identity_service: IdentityService::default(),
             admin_storage,
             nonce_manager: Arc::new(InMemoryNonceManager::default()),
+            external_servers: ExternalServersSection::default(),
         };
         let user_id = USER_A;
         let amount = 5000;
@@ -206,6 +208,7 @@ mod tests {
             identity_service: IdentityService::default(),
             admin_storage,
             nonce_manager: Arc::new(InMemoryNonceManager::default()),
+            external_servers: ExternalServersSection::default(),
         };
 
         let target_user = "test_user".to_string();

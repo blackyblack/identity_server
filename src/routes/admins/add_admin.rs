@@ -85,6 +85,7 @@ mod tests {
 
     use crate::{
         admins::{AdminStorage, InMemoryAdminStorage},
+        config::ExternalServersSection,
         identity::IdentityService,
         verify::{admin::admin_sign, nonce::InMemoryNonceManager, random_keypair},
     };
@@ -102,6 +103,7 @@ mod tests {
             identity_service: IdentityService::default(),
             admin_storage: admin_storage.clone(),
             nonce_manager: Arc::new(InMemoryNonceManager::default()),
+            external_servers: ExternalServersSection::default(),
         };
 
         let new_admin = "new_admin_user".to_string();
@@ -149,6 +151,7 @@ mod tests {
             identity_service: IdentityService::default(),
             admin_storage,
             nonce_manager: Arc::new(InMemoryNonceManager::default()),
+            external_servers: ExternalServersSection::default(),
         };
 
         let new_admin = "new_admin_user".to_string();

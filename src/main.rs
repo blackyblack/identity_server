@@ -71,6 +71,7 @@ async fn main() {
         identity_service,
         admin_storage: storage.admin_storage,
         nonce_manager: storage.nonce_manager,
+        external_servers: config.external_servers,
     };
 
     log::info!("Starting identity server");

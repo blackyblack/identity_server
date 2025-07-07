@@ -30,6 +30,7 @@ mod tests {
 
     use crate::{
         admins::InMemoryAdminStorage, identity::IdentityService,
+        config::ExternalServersSection,
         verify::nonce::InMemoryNonceManager,
     };
 
@@ -46,6 +47,7 @@ mod tests {
             identity_service: IdentityService::default(),
             admin_storage,
             nonce_manager: Arc::new(InMemoryNonceManager::default()),
+            external_servers: ExternalServersSection::default(),
         };
 
         // test for moderator user
