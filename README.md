@@ -41,7 +41,7 @@ The application reads database credentials from environment variables:
 - `MYSQL_USER` (default `root`)
 - `MYSQL_PASSWORD`
 - `MYSQL_DATABASE` (default `identity`)
-- `SERVER_PRIVATE_KEY` hex-encoded private key for server identity
+- `SERVER_PRIVATE_KEY` hex-encoded private key for server identity (if empty or unset, a random private key will be generated)
 
 You can place them in a `.env` file or export them before running the server:
 
