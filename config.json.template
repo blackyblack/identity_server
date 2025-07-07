@@ -2,9 +2,5 @@
   "admins": {
     "admins": [],
     "moderators": []
-  },
-  "external_servers": {
-    "allow_all": false,
-    "allow_servers": []
   }
 }

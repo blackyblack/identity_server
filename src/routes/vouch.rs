@@ -4,6 +4,8 @@ use serde::Deserialize;
 use serde_json::json;
 use tide::{Request, Response, http::mime};
 
+#[cfg(test)]
+use crate::servers::storage::ServerInfo;
 use crate::{
     identity::{UserAddress, idt::balance, vouch::vouch},
     routes::State,
@@ -38,8 +40,8 @@ pub async fn route(mut req: Request<State>) -> tide::Result {
                 .build());
         }
         if let Some(server_sig) = &body.server_signature {
-            let servers = &req.state().external_servers;
-            if !servers.allow_all && !servers.allow_servers.contains(&server_sig.signer) {
+            let servers = req.state().server_storage.servers().await?;
+            if !servers.contains_key(&server_sig.signer) {
                 return Ok(Response::builder(403)
                     .body(json!({"error": "server not allowed"}))
                     .content_type(mime::JSON)
@@ -144,13 +146,20 @@ mod tests {
 
     #[async_std::test]
     async fn test_server_vouch() {
-        let mut state = State::default();
+        let state = State::default();
         let (user_priv, user_address) = random_keypair();
         let (server_priv, server_addr) = random_keypair();
         state
-            .external_servers
-            .allow_servers
-            .insert(server_addr.clone());
+            .server_storage
+            .add_server(
+                server_addr.clone(),
+                ServerInfo {
+                    url: "http://x".into(),
+                    scale: 1.0,
+                },
+            )
+            .await
+            .unwrap();
 
         let user_b = "userB";
 
@@ -297,13 +306,20 @@ mod tests {
 
     #[async_std::test]
     async fn test_invalid_server_signature() {
-        let mut state = State::default();
+        let state = State::default();
         let (user_priv, user_address) = random_keypair();
         let (server_priv, server_addr) = random_keypair();
         state
-            .external_servers
-            .allow_servers
-            .insert(server_addr.clone());
+            .server_storage
+            .add_server(
+                server_addr.clone(),
+                ServerInfo {
+                    url: "http://x".into(),
+                    scale: 1.0,
+                },
+            )
+            .await
+            .unwrap();
 
         let user_b = "userB";
 

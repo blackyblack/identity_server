@@ -20,19 +20,9 @@ pub struct AdminsSection {
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
-pub struct ExternalServersSection {
-    #[serde(default)]
-    pub allow_all: bool,
-    #[serde(default)]
-    pub allow_servers: HashSet<UserAddress>,
-}
-
-#[derive(Debug, Clone, Deserialize, Default)]
 pub struct Config {
     #[serde(default)]
     pub admins: AdminsSection,
-    #[serde(default)]
-    pub external_servers: ExternalServersSection,
 }
 
 pub async fn load_config(path: &str) -> Result<Config, io::Error> {
@@ -88,32 +78,17 @@ mod tests {
         let cfg: Config = serde_json::from_str(json).unwrap();
         assert!(cfg.admins.admins.is_empty());
         assert!(cfg.admins.moderators.is_empty());
-        assert!(!cfg.external_servers.allow_all);
-        assert!(cfg.external_servers.allow_servers.is_empty());
+        // no external server configuration
     }
 
     #[test]
     fn test_parse_servers() {
         let json = r#"{
-            "admins": {"admins": ["a"], "moderators": []},
-            "external_servers": {
-                "allow_all": false,
-                "allow_servers": ["address1", "address2"]
-            }
+            "admins": {"admins": ["a"], "moderators": []}
         }"#;
         let cfg: Config = serde_json::from_str(json).unwrap();
         assert_eq!(cfg.admins.admins.len(), 1);
-        assert_eq!(cfg.external_servers.allow_servers.len(), 2);
-        assert!(
-            cfg.external_servers
-                .allow_servers
-                .contains(&"address1".to_string())
-        );
-        assert!(
-            cfg.external_servers
-                .allow_servers
-                .contains(&"address2".to_string())
-        );
+        assert!(cfg.admins.admins.contains("a"));
     }
 
     #[async_std::test]
@@ -123,22 +98,18 @@ mod tests {
         let cfg = load_config(path.to_str().unwrap()).await.unwrap();
         assert!(cfg.admins.admins.is_empty());
         assert!(cfg.admins.moderators.is_empty());
-        assert!(cfg.external_servers.allow_servers.is_empty());
     }
 
     #[async_std::test]
     async fn test_load_config_valid_file() {
         let temp_dir = TempDir::new("config").unwrap();
         let content = r#"{
-            "admins": {"admins": ["user"], "moderators": ["mod"]},
-            "external_servers": {"allow_all": true, "allow_servers": ["address1"]}
+            "admins": {"admins": ["user"], "moderators": ["mod"]}
         }"#;
         let path = create_test_config(&temp_dir, content).await;
         let cfg = load_config(path.to_str().unwrap()).await.unwrap();
         assert_eq!(cfg.admins.admins.len(), 1);
         assert_eq!(cfg.admins.moderators.len(), 1);
-        assert!(cfg.external_servers.allow_all);
-        assert_eq!(cfg.external_servers.allow_servers.len(), 1);
     }
 
     #[async_std::test]
