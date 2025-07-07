@@ -8,7 +8,7 @@ use identity_server::{
     identity::IdentityService,
     routes::{self, State},
     storage,
-    verify::private_key_to_address,
+    verify::{private_key_to_address, random_keypair},
 };
 use tide::Server;
 
@@ -37,6 +37,23 @@ async fn main() {
             }
         }
     }
+
+    let server_private_key = if let Ok(key) = env::var("SERVER_PRIVATE_KEY") {
+        if let Err(e) = private_key_to_address(&key) {
+            log::error!("Invalid SERVER_PRIVATE_KEY: {:?}", e);
+            panic!("Invalid SERVER_PRIVATE_KEY: {}", e);
+        }
+        key
+    } else {
+        log::warn!("SERVER_PRIVATE_KEY not set, generating a random key");
+        let (key, _) = random_keypair();
+        key
+    };
+    log::info!(
+        "Server address: {}",
+        private_key_to_address(&server_private_key).expect("Should be valid private key")
+    );
+
     let config = match config::load_config(DEFAULT_CONFIG_PATH).await {
         Ok(config) => config,
         Err(e) => {
