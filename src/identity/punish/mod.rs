@@ -63,7 +63,7 @@ async fn penalty_from_vouchees(
         PENALTY_VOUCHEE_WEIGHT_RATIO.0,
         PENALTY_VOUCHEE_WEIGHT_RATIO.1,
     )
-    .expect("PENALTY_VOUCHEE_WEIGHT_RATIO should not be NaN");
+    .expect("PENALTY_VOUCHEE_WEIGHT_RATIO denominator must not be zero");
     Ok(penalty_scale.mul(penalty))
 }
 
@@ -152,7 +152,7 @@ impl IdentityService {
                 PENALTY_VOUCHEE_WEIGHT_RATIO.0,
                 PENALTY_VOUCHEE_WEIGHT_RATIO.1,
             )
-            .expect("PENALTY_VOUCHEE_WEIGHT_RATIO should not be NaN");
+            .expect("PENALTY_VOUCHEE_WEIGHT_RATIO denominator must not be zero");
             let vouchee_penalty = penalty(self, &vouchee).await?;
             penalty_scale.mul(vouchee_penalty)
         };

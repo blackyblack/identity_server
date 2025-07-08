@@ -58,7 +58,7 @@ impl Visitor for VouchTree<'_> {
         balances: &HashMap<UserAddress, IdtAmount>,
     ) -> Result<IdtAmount, Error> {
         let voucher_scale = Rational::new(VOUCHER_WEIGHT_RATIO.0, VOUCHER_WEIGHT_RATIO.1)
-            .expect("VOUCHER_WEIGHT_RATIO should not be NaN");
+            .expect("VOUCHER_WEIGHT_RATIO denominator must not be zero");
         let proven_balance = {
             match self.service.proof(node).await? {
                 // fallback to genesis balance if proof is not found

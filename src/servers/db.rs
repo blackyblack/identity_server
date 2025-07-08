@@ -61,7 +61,7 @@ impl ServerStorage for DatabaseServerStorage {
                 let key = r.get::<String, _>(0);
                 let url = r.get::<String, _>(1);
                 let scale = Rational::new(r.get::<i32, _>(2) as u32, r.get::<i32, _>(3) as u32)
-                    .expect("Scale factor should not be NaN");
+                    .expect("Scale factor denominator must not be zero");
                 (key, ServerInfo { url, scale })
             })
             .collect())
