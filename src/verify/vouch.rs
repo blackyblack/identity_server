@@ -3,8 +3,9 @@ use crate::{
     verify::{
         error::Error,
         nonce::{Nonce, NonceManager},
-        private_key_to_address,
+        sign_message,
         signature::Signature,
+        verify_message,
     },
 };
 
@@ -13,23 +14,33 @@ pub async fn vouch_sign(
     vouchee: UserAddress,
     nonce_manager: &dyn NonceManager,
 ) -> Result<Signature, Error> {
-    let user = private_key_to_address(private_key_hex)?;
-    let nonce = nonce_manager.next_nonce(&user).await?;
-    let message = vouch_signature_message(vouchee, nonce);
-    Signature::generate(private_key_hex, &message, nonce).await
+    sign_message(
+        private_key_hex,
+        &vouch_message_prefix(vouchee),
+        nonce_manager,
+    )
+    .await
 }
 
 pub async fn vouch_verify(
-    signature: &Signature,
+    signature: String,
+    signer: &UserAddress,
+    nonce: Nonce,
     vouchee: UserAddress,
     nonce_manager: &dyn NonceManager,
 ) -> Result<(), Error> {
-    let message = vouch_signature_message(vouchee.clone(), signature.nonce);
-    signature.verify(&message, nonce_manager).await
+    verify_message(
+        signature,
+        signer,
+        nonce,
+        &vouch_message_prefix(vouchee),
+        nonce_manager,
+    )
+    .await
 }
 
-fn vouch_signature_message(user: UserAddress, nonce: Nonce) -> String {
-    format!("vouch/{user}/{nonce}")
+fn vouch_message_prefix(user: UserAddress) -> String {
+    format!("vouch/{user}")
 }
 
 #[cfg(test)]
@@ -42,14 +53,20 @@ mod tests {
     async fn test_basic() {
         let (private_key, _) = random_keypair();
         let nonce_manager = InMemoryNonceManager::default();
-        let vouchee = "vouchee".to_string();
+        let vouchee: String = "vouchee".to_string();
         let signature = vouch_sign(&private_key, vouchee.clone(), &nonce_manager)
             .await
             .expect("Should generate signature");
         assert!(
-            vouch_verify(&signature, vouchee, &nonce_manager)
-                .await
-                .is_ok()
+            vouch_verify(
+                signature.signature,
+                &signature.signer,
+                signature.nonce,
+                vouchee,
+                &nonce_manager
+            )
+            .await
+            .is_ok()
         );
     }
 
@@ -63,9 +80,15 @@ mod tests {
             .expect("Should generate signature");
         let bad_user = "bad user".to_string();
         assert!(
-            vouch_verify(&signature, bad_user, &nonce_manager)
-                .await
-                .is_err()
+            vouch_verify(
+                signature.signature,
+                &signature.signer,
+                signature.nonce,
+                bad_user,
+                &nonce_manager
+            )
+            .await
+            .is_err()
         );
     }
 
@@ -78,14 +101,16 @@ mod tests {
             .await
             .expect("Should generate signature");
         let bad_nonce = 6060;
-        let signature = Signature {
-            nonce: bad_nonce,
-            ..signature
-        };
         assert!(
-            vouch_verify(&signature, vouchee, &nonce_manager)
-                .await
-                .is_err()
+            vouch_verify(
+                signature.signature,
+                &signature.signer,
+                bad_nonce,
+                vouchee,
+                &nonce_manager
+            )
+            .await
+            .is_err()
         );
     }
 
@@ -98,14 +123,26 @@ mod tests {
             .await
             .expect("Should generate signature");
         assert!(
-            vouch_verify(&signature, vouchee.clone(), &nonce_manager)
-                .await
-                .is_ok()
+            vouch_verify(
+                signature.signature.clone(),
+                &signature.signer,
+                signature.nonce,
+                vouchee.clone(),
+                &nonce_manager
+            )
+            .await
+            .is_ok()
         );
         // duplicate verification with the same nonce should fail
-        let err = vouch_verify(&signature, vouchee, &nonce_manager)
-            .await
-            .unwrap_err();
+        let err = vouch_verify(
+            signature.signature,
+            &signature.signer,
+            signature.nonce,
+            vouchee,
+            &nonce_manager,
+        )
+        .await
+        .unwrap_err();
         assert!(matches!(err, Error::NonceError(_)));
     }
 }

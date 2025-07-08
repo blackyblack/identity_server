@@ -3,8 +3,9 @@ use crate::{
     verify::{
         error::Error,
         nonce::{Nonce, NonceManager},
-        private_key_to_address,
+        sign_message,
         signature::Signature,
+        verify_message,
     },
 };
 
@@ -13,23 +14,33 @@ pub async fn forget_sign(
     vouchee: UserAddress,
     nonce_manager: &dyn NonceManager,
 ) -> Result<Signature, Error> {
-    let user = private_key_to_address(private_key_hex)?;
-    let nonce = nonce_manager.next_nonce(&user).await?;
-    let message = forget_signature_message(vouchee, nonce);
-    Signature::generate(private_key_hex, &message, nonce).await
+    sign_message(
+        private_key_hex,
+        &forget_message_prefix(vouchee),
+        nonce_manager,
+    )
+    .await
 }
 
 pub async fn forget_verify(
-    signature: &Signature,
+    signature: String,
+    signer: &UserAddress,
+    nonce: Nonce,
     vouchee: UserAddress,
     nonce_manager: &dyn NonceManager,
 ) -> Result<(), Error> {
-    let message = forget_signature_message(vouchee, signature.nonce);
-    signature.verify(&message, nonce_manager).await
+    verify_message(
+        signature,
+        signer,
+        nonce,
+        &forget_message_prefix(vouchee),
+        nonce_manager,
+    )
+    .await
 }
 
-fn forget_signature_message(user: UserAddress, nonce: Nonce) -> String {
-    format!("forget/{user}/{nonce}")
+fn forget_message_prefix(user: UserAddress) -> String {
+    format!("forget/{user}")
 }
 
 #[cfg(test)]
@@ -47,9 +58,15 @@ mod tests {
             .await
             .expect("Should generate signature");
         assert!(
-            forget_verify(&signature, user, &nonce_manager)
-                .await
-                .is_ok()
+            forget_verify(
+                signature.signature,
+                &signature.signer,
+                signature.nonce,
+                user,
+                &nonce_manager
+            )
+            .await
+            .is_ok()
         );
     }
 
@@ -63,9 +80,15 @@ mod tests {
             .expect("Should generate signature");
         let bad_user = "bad user".to_string();
         assert!(
-            forget_verify(&signature, bad_user, &nonce_manager)
-                .await
-                .is_err()
+            forget_verify(
+                signature.signature,
+                &signature.signer,
+                signature.nonce,
+                bad_user,
+                &nonce_manager
+            )
+            .await
+            .is_err()
         );
     }
 
@@ -78,14 +101,16 @@ mod tests {
             .await
             .expect("Should generate signature");
         let bad_nonce = 6060;
-        let signature = Signature {
-            nonce: bad_nonce,
-            ..signature
-        };
         assert!(
-            forget_verify(&signature, user, &nonce_manager)
-                .await
-                .is_err()
+            forget_verify(
+                signature.signature,
+                &signature.signer,
+                bad_nonce,
+                user,
+                &nonce_manager
+            )
+            .await
+            .is_err()
         );
     }
 
@@ -98,14 +123,26 @@ mod tests {
             .await
             .expect("Should generate signature");
         assert!(
-            forget_verify(&signature, user.clone(), &nonce_manager)
-                .await
-                .is_ok()
+            forget_verify(
+                signature.signature.clone(),
+                &signature.signer,
+                signature.nonce,
+                user.clone(),
+                &nonce_manager
+            )
+            .await
+            .is_ok()
         );
         // duplicate verification with the same nonce should fail
-        let err = forget_verify(&signature, user, &nonce_manager)
-            .await
-            .unwrap_err();
+        let err = forget_verify(
+            signature.signature,
+            &signature.signer,
+            signature.nonce,
+            user,
+            &nonce_manager,
+        )
+        .await
+        .unwrap_err();
         assert!(matches!(err, Error::NonceError(_)));
     }
 }

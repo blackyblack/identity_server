@@ -6,8 +6,8 @@ use tide::{Request, Response, http::mime};
 
 use crate::{
     identity::UserAddress,
-    routes::State,
-    verify::{admin::admin_verify, nonce::Nonce, signature::Signature},
+    routes::{State, verify_admin_action},
+    verify::{admins::admin_message_prefix, nonce::Nonce},
 };
 
 #[derive(Deserialize)]
@@ -21,35 +21,18 @@ pub async fn route(mut req: Request<State>) -> tide::Result {
     let recipient = req.param("user")?.to_string();
     let body: AdminRequest = req.body_json().await?;
     let sender = body.from.clone();
+    let message_prefix = admin_message_prefix(recipient.clone());
 
-    if req
-        .state()
-        .admin_storage
-        .check_admin(&sender)
-        .await
-        .is_err()
+    if let Err(response) = verify_admin_action(
+        req.state(),
+        &sender,
+        body.signature,
+        body.nonce,
+        &message_prefix,
+    )
+    .await
     {
-        return Ok(Response::builder(403)
-            .body(json!({"error": "not admin"}))
-            .content_type(mime::JSON)
-            .build());
-    }
-
-    {
-        let signature = Signature {
-            signer: sender.clone(),
-            signature: body.signature,
-            nonce: body.nonce,
-        };
-        if admin_verify(&signature, recipient.clone(), &*req.state().nonce_manager)
-            .await
-            .is_err()
-        {
-            return Ok(Response::builder(400)
-                .body(json!({"error": "signature verification failed"}))
-                .content_type(mime::JSON)
-                .build());
-        }
+        return Ok(response);
     }
 
     if req
@@ -85,7 +68,7 @@ mod tests {
 
     use crate::{
         admins::{AdminStorage, InMemoryAdminStorage},
-        verify::{admin::admin_sign, random_keypair},
+        verify::{random_keypair, sign_message},
     };
 
     use super::*;
@@ -106,9 +89,10 @@ mod tests {
         let req_url = format!("/remove_admin/{other_admin}");
 
         // sign the admin request
-        let signature = admin_sign(&private_key, other_admin.clone(), &*state.nonce_manager)
+        let message_prefix = admin_message_prefix(other_admin.clone());
+        let signature = sign_message(&private_key, &message_prefix, &*state.nonce_manager)
             .await
-            .expect("Should sign successfully");
+            .expect("Should sign");
 
         let body = json!({
             "from": signature.signer,
@@ -151,9 +135,10 @@ mod tests {
         let user = "new_admin_user".to_string();
         let req_url = format!("/remove_admin/{user}");
 
-        let signature = admin_sign(&private_key, user, &*state.nonce_manager)
+        let message_prefix = admin_message_prefix(user);
+        let signature = sign_message(&private_key, &message_prefix, &*state.nonce_manager)
             .await
-            .expect("Should sign successfully");
+            .expect("Should sign");
 
         let body = json!({
             "from": signature.signer,

@@ -7,7 +7,7 @@ use tide::{Request, Response, http::mime};
 use crate::{
     identity::{IdtAmount, ProofId, UserAddress, error::Error, idt::balance, proof::prove},
     routes::State,
-    verify::{nonce::Nonce, proof::proof_verify, signature::Signature},
+    verify::{nonce::Nonce, proof::proof_verify},
 };
 
 #[derive(Deserialize)]
@@ -38,13 +38,10 @@ pub async fn route(mut req: Request<State>) -> tide::Result {
             .build());
     }
     {
-        let signature = Signature {
-            signer: moderator.clone(),
-            signature: body.signature,
-            nonce: body.nonce,
-        };
         if proof_verify(
-            &signature,
+            body.signature,
+            &moderator,
+            body.nonce,
             user.clone(),
             amount,
             proof_id,

@@ -9,7 +9,7 @@ use crate::servers::storage::ServerInfo;
 use crate::{
     identity::{UserAddress, idt::balance, vouch::vouch},
     routes::State,
-    verify::{nonce::Nonce, servers::server_verify, signature::Signature, vouch::vouch_verify},
+    verify::{nonce::Nonce, proxy::proxy_verify, signature::Signature, vouch::vouch_verify},
 };
 
 #[derive(Deserialize)]
@@ -17,7 +17,7 @@ struct VouchRequest {
     from: UserAddress,
     signature: String,
     nonce: Nonce,
-    server_signature: Option<Signature>,
+    proxy_signature: Option<Signature>,
 }
 
 pub async fn route(mut req: Request<State>) -> tide::Result {
@@ -30,16 +30,22 @@ pub async fn route(mut req: Request<State>) -> tide::Result {
             signature: body.signature.clone(),
             nonce: body.nonce,
         };
-        if vouch_verify(&signature, vouchee.clone(), &*req.state().nonce_manager)
-            .await
-            .is_err()
+        if vouch_verify(
+            body.signature,
+            &voucher,
+            body.nonce,
+            vouchee.clone(),
+            &*req.state().nonce_manager,
+        )
+        .await
+        .is_err()
         {
             return Ok(Response::builder(400)
                 .body(json!({"error": "signature verification failed"}))
                 .content_type(mime::JSON)
                 .build());
         }
-        if let Some(server_sig) = &body.server_signature {
+        if let Some(server_sig) = &body.proxy_signature {
             let servers = req.state().server_storage.servers().await?;
             if !servers.contains_key(&server_sig.signer) {
                 return Ok(Response::builder(403)
@@ -47,9 +53,11 @@ pub async fn route(mut req: Request<State>) -> tide::Result {
                     .content_type(mime::JSON)
                     .build());
             }
-            if server_verify(
-                server_sig,
-                signature.signature.clone(),
+            if proxy_verify(
+                server_sig.signature.clone(),
+                &server_sig.signer,
+                server_sig.nonce,
+                &signature.signature,
                 &*req.state().nonce_manager,
             )
             .await
@@ -90,7 +98,7 @@ mod tests {
             proof::prove,
             tests::{MODERATOR, PROOF_ID, USER_A},
         },
-        verify::{random_keypair, servers::server_sign, vouch::vouch_sign},
+        verify::{proxy::proxy_sign, random_keypair, vouch::vouch_sign},
     };
     use serde_json::Value;
     use tide::http::{Request as HttpRequest, Response, Url};
@@ -166,18 +174,14 @@ mod tests {
         let user_sig = vouch_sign(&user_priv, user_b.to_string(), &*state.nonce_manager)
             .await
             .expect("sign");
-        let server_sig = server_sign(
-            &server_priv,
-            user_sig.signature.clone(),
-            &*state.nonce_manager,
-        )
-        .await
-        .expect("server sign");
+        let server_sig = proxy_sign(&server_priv, &user_sig.signature, &*state.nonce_manager)
+            .await
+            .expect("server sign");
         let body = json!({
             "from": user_address,
             "signature": user_sig.signature,
             "nonce": user_sig.nonce,
-            "server_signature": server_sig,
+            "proxy_signature": server_sig,
         });
 
         let req_url = format!("/vouch/{user_b}");
@@ -234,18 +238,14 @@ mod tests {
         let user_sig = vouch_sign(&user_priv, user_b.to_string(), &*state.nonce_manager)
             .await
             .expect("sign");
-        let server_sig = server_sign(
-            &server_priv,
-            user_sig.signature.clone(),
-            &*state.nonce_manager,
-        )
-        .await
-        .expect("Server sign");
+        let server_sig = proxy_sign(&server_priv, &user_sig.signature, &*state.nonce_manager)
+            .await
+            .expect("Server sign");
         let body = json!({
             "from": user_address,
             "signature": user_sig.signature,
             "nonce": user_sig.nonce,
-            "server_signature": server_sig,
+            "proxy_signature": server_sig,
         });
 
         let req_url = format!("/vouch/{user_b}");
@@ -305,7 +305,7 @@ mod tests {
     }
 
     #[async_std::test]
-    async fn test_invalid_server_signature() {
+    async fn test_invalid_proxy_signature() {
         let state = State::default();
         let (user_priv, user_address) = random_keypair();
         let (server_priv, server_addr) = random_keypair();
@@ -329,13 +329,9 @@ mod tests {
             .expect("User sign");
 
         // generate valid server signature
-        let server_sig = server_sign(
-            &server_priv,
-            user_sig.signature.clone(),
-            &*state.nonce_manager,
-        )
-        .await
-        .expect("Server sign");
+        let server_sig = proxy_sign(&server_priv, &user_sig.signature, &*state.nonce_manager)
+            .await
+            .expect("Server sign");
 
         // tamper with server signature
         let mut invalid_server_sig = server_sig.clone();
@@ -345,7 +341,7 @@ mod tests {
             "from": user_address,
             "signature": user_sig.signature,
             "nonce": user_sig.nonce,
-            "server_signature": invalid_server_sig,
+            "proxy_signature": invalid_server_sig,
         });
 
         let req_url = format!("/vouch/{user_b}");

@@ -32,7 +32,7 @@ impl DatabaseServerStorage {
 #[async_trait]
 impl ServerStorage for DatabaseServerStorage {
     async fn add_server(&self, address: UserAddress, info: ServerInfo) -> Result<(), Error> {
-        sqlx::query("INSERT OR REPLACE INTO servers (address, url, scale) VALUES (?, ?, ?)")
+        sqlx::query("REPLACE INTO servers (address, url, scale) VALUES (?, ?, ?)")
             .bind(address)
             .bind(info.url)
             .bind(info.scale)
@@ -65,5 +65,87 @@ impl ServerStorage for DatabaseServerStorage {
                 )
             })
             .collect())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[async_std::test]
+    async fn test_basic() {
+        let storage = DatabaseServerStorage::new("sqlite::memory:").await.unwrap();
+        let server1 = "server1".to_string();
+        let server2 = "server2".to_string();
+
+        // verify initially no servers exist
+        let servers = storage.servers().await.unwrap();
+        assert!(servers.is_empty());
+
+        // add a server
+        let info1 = ServerInfo {
+            url: "http://example1.com".to_string(),
+            scale: 1.0,
+        };
+        storage
+            .add_server(server1.clone(), info1.clone())
+            .await
+            .unwrap();
+
+        // verify server was added
+        let servers = storage.servers().await.unwrap();
+        assert_eq!(servers.len(), 1);
+        assert!(servers.contains_key(&server1));
+        let retrieved_info = &servers[&server1];
+        assert_eq!(retrieved_info.url, info1.url);
+        assert_eq!(retrieved_info.scale, info1.scale);
+
+        // add another server
+        let info2 = ServerInfo {
+            url: "http://example2.com".to_string(),
+            scale: 2.0,
+        };
+        storage
+            .add_server(server2.clone(), info2.clone())
+            .await
+            .unwrap();
+
+        // verify both servers exist
+        let servers = storage.servers().await.unwrap();
+        assert_eq!(servers.len(), 2);
+        assert!(servers.contains_key(&server1));
+        assert!(servers.contains_key(&server2));
+
+        // update a server
+        let updated_info = ServerInfo {
+            url: "http://updated.com".to_string(),
+            scale: 3.0,
+        };
+        storage
+            .add_server(server1.clone(), updated_info.clone())
+            .await
+            .unwrap();
+
+        // verify update worked
+        let servers = storage.servers().await.unwrap();
+        assert_eq!(servers.len(), 2);
+        let retrieved_info = &servers[&server1];
+        assert_eq!(retrieved_info.url, updated_info.url);
+        assert_eq!(retrieved_info.scale, updated_info.scale);
+
+        // remove a server
+        storage.remove_server(server1.clone()).await.unwrap();
+
+        // verify server was removed
+        let servers = storage.servers().await.unwrap();
+        assert_eq!(servers.len(), 1);
+        assert!(!servers.contains_key(&server1));
+        assert!(servers.contains_key(&server2));
+
+        // removing a non-existent server should not fail
+        storage
+            .remove_server("nonexistent".to_string())
+            .await
+            .unwrap();
     }
 }

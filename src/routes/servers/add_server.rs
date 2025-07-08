@@ -6,9 +6,9 @@ use tide::{Request, Response, http::mime};
 
 use crate::{
     identity::UserAddress,
-    routes::State,
+    routes::{State, verify_admin_action},
     servers::storage::ServerInfo,
-    verify::{admin::admin_verify, nonce::Nonce, signature::Signature},
+    verify::{admins::admin_set_server_message_prefix, nonce::Nonce},
 };
 
 #[derive(Deserialize)]
@@ -24,39 +24,18 @@ struct ServerRequest {
 pub async fn route(mut req: Request<State>) -> tide::Result {
     let body: ServerRequest = req.body_json().await?;
     let sender = body.from.clone();
+    let message_prefix = admin_set_server_message_prefix(body.address.clone());
 
-    if req
-        .state()
-        .admin_storage
-        .check_admin(&sender)
-        .await
-        .is_err()
+    if let Err(response) = verify_admin_action(
+        req.state(),
+        &sender,
+        body.signature,
+        body.nonce,
+        &message_prefix,
+    )
+    .await
     {
-        return Ok(Response::builder(403)
-            .body(json!({"error": "not admin"}))
-            .content_type(mime::JSON)
-            .build());
-    }
-
-    {
-        let signature = Signature {
-            signer: sender.clone(),
-            signature: body.signature,
-            nonce: body.nonce,
-        };
-        if admin_verify(
-            &signature,
-            body.address.clone(),
-            &*req.state().nonce_manager,
-        )
-        .await
-        .is_err()
-        {
-            return Ok(Response::builder(400)
-                .body(json!({"error": "signature verification failed"}))
-                .content_type(mime::JSON)
-                .build());
-        }
+        return Ok(response);
     }
 
     let info = ServerInfo {
@@ -92,34 +71,38 @@ pub async fn route(mut req: Request<State>) -> tide::Result {
 
 #[cfg(test)]
 mod tests {
+    use std::{collections::HashSet, sync::Arc};
+
     use super::*;
-    use crate::verify::{admin::admin_sign, random_keypair};
+    use crate::{
+        admins::InMemoryAdminStorage,
+        verify::{random_keypair, sign_message},
+    };
     use serde_json::Value;
     use tide::http::{Request as HttpRequest, Response, Url};
 
     #[async_std::test]
     async fn test_basic() {
         let (admin_priv, admin_addr) = random_keypair();
-        let admins = std::collections::HashSet::from([admin_addr.clone()]);
-        let admin_storage = std::sync::Arc::new(crate::admins::InMemoryAdminStorage::new(
-            admins,
-            std::collections::HashSet::new(),
-        ));
+        let admins = HashSet::from([admin_addr.clone()]);
+        let admin_storage = Arc::new(InMemoryAdminStorage::new(admins, HashSet::new()));
         let state = State {
             admin_storage: admin_storage.clone(),
             ..Default::default()
         };
 
         let req_url = "/add_server";
-        let signature = admin_sign(&admin_priv, "server1".to_string(), &*state.nonce_manager)
+        let message_prefix = admin_set_server_message_prefix("server1".to_string());
+        let signature = sign_message(&admin_priv, &message_prefix, &*state.nonce_manager)
             .await
-            .expect("sign");
+            .expect("Should sign");
         let body = json!({
             "from": signature.signer,
             "signature": signature.signature,
             "nonce": signature.nonce,
             "address": "server1",
             "url": "http://example.com",
+            // TODO: use integer arithmetics: "scale": {"numerator": 1, "denominator": 1}
             "scale": 1.0
         });
 
@@ -137,6 +120,7 @@ mod tests {
 
         assert_eq!(response.status(), 200);
         let body: Value = response.body_json().await.unwrap();
+        // TODO: add URL to response
         assert_eq!(body["server"], "server1");
         assert_eq!(body["from"], admin_addr);
         assert_eq!(body["nonce"], signature.nonce);
@@ -148,5 +132,45 @@ mod tests {
                 .unwrap()
                 .contains_key("server1")
         );
+    }
+
+    #[async_std::test]
+    async fn test_no_privilege() {
+        // create a random keypair for a non-privileged user
+        let (private_key, _) = random_keypair();
+        let admins = HashSet::from(["other_admin".to_string()]);
+        let admin_storage = Arc::new(InMemoryAdminStorage::new(admins, HashSet::new()));
+        let state = State {
+            admin_storage: admin_storage.clone(),
+            ..Default::default()
+        };
+
+        let req_url = "/add_server";
+        let message_prefix = admin_set_server_message_prefix("server1".to_string());
+        let signature = sign_message(&private_key, &message_prefix, &*state.nonce_manager)
+            .await
+            .expect("Should sign");
+        let body = json!({
+            "from": signature.signer,
+            "signature": signature.signature,
+            "nonce": signature.nonce,
+            "address": "server1",
+            "url": "http://example.com",
+            "scale": 1.0
+        });
+
+        let mut req = HttpRequest::new(
+            tide::http::Method::Post,
+            Url::parse(&format!("http://example.com{}", req_url)).unwrap(),
+        );
+        req.set_body(serde_json::to_string(&body).unwrap());
+        req.set_content_type(mime::JSON);
+
+        let mut server = tide::with_state(state);
+        server.at("/add_server").post(route);
+
+        let response: Response = server.respond(req).await.unwrap();
+
+        assert_eq!(response.status(), 403);
     }
 }

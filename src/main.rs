@@ -118,7 +118,9 @@ async fn setup_routes(server: &mut Server<State>) {
     server
         .at("/remove_moderator/:user")
         .post(routes::admins::remove_moderator::route);
-    server.at("/servers").get(routes::servers::servers::route);
+    server
+        .at("/servers")
+        .get(routes::servers::get_servers::route);
     server
         .at("/add_server")
         .post(routes::servers::add_server::route);

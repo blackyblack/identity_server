@@ -3,8 +3,9 @@ use crate::{
     verify::{
         error::Error,
         nonce::{Nonce, NonceManager},
-        private_key_to_address,
+        sign_message,
         signature::Signature,
+        verify_message,
     },
 };
 
@@ -15,30 +16,35 @@ pub async fn punish_sign(
     proof_id: ProofId,
     nonce_manager: &dyn NonceManager,
 ) -> Result<Signature, Error> {
-    let moderator = private_key_to_address(private_key_hex)?;
-    let nonce = nonce_manager.next_nonce(&moderator).await?;
-    let message = punish_signature_message(user, nonce, amount, proof_id);
-    Signature::generate(private_key_hex, &message, nonce).await
+    sign_message(
+        private_key_hex,
+        &punish_message_prefix(user, amount, proof_id),
+        nonce_manager,
+    )
+    .await
 }
 
 pub async fn punish_verify(
-    signature: &Signature,
+    signature: String,
+    signer: &UserAddress,
+    nonce: Nonce,
     user: UserAddress,
     amount: IdtAmount,
     proof_id: ProofId,
     nonce_manager: &dyn NonceManager,
 ) -> Result<(), Error> {
-    let message = punish_signature_message(user.clone(), signature.nonce, amount, proof_id);
-    signature.verify(&message, nonce_manager).await
+    verify_message(
+        signature,
+        signer,
+        nonce,
+        &punish_message_prefix(user.clone(), amount, proof_id),
+        nonce_manager,
+    )
+    .await
 }
 
-fn punish_signature_message(
-    user: UserAddress,
-    nonce: Nonce,
-    amount: IdtAmount,
-    proof_id: ProofId,
-) -> String {
-    format!("punish/{user}/{nonce}/{amount}/{proof_id}")
+fn punish_message_prefix(user: UserAddress, amount: IdtAmount, proof_id: ProofId) -> String {
+    format!("punish/{user}/{amount}/{proof_id}")
 }
 
 #[cfg(test)]
@@ -58,9 +64,17 @@ mod tests {
             .await
             .expect("Should generate signature");
         assert!(
-            punish_verify(&signature, user, amount, proof_id, &nonce_manager)
-                .await
-                .is_ok()
+            punish_verify(
+                signature.signature,
+                &signature.signer,
+                signature.nonce,
+                user,
+                amount,
+                proof_id,
+                &nonce_manager
+            )
+            .await
+            .is_ok()
         );
     }
 
@@ -76,9 +90,17 @@ mod tests {
             .expect("Should generate signature");
         let bad_user = "bad user".to_string();
         assert!(
-            punish_verify(&signature, bad_user, amount, proof_id, &nonce_manager)
-                .await
-                .is_err()
+            punish_verify(
+                signature.signature,
+                &signature.signer,
+                signature.nonce,
+                bad_user,
+                amount,
+                proof_id,
+                &nonce_manager
+            )
+            .await
+            .is_err()
         );
     }
 
@@ -94,9 +116,17 @@ mod tests {
             .expect("Should generate signature");
         let bad_amount = 200;
         assert!(
-            punish_verify(&signature, user, bad_amount, proof_id, &nonce_manager)
-                .await
-                .is_err()
+            punish_verify(
+                signature.signature,
+                &signature.signer,
+                signature.nonce,
+                user,
+                bad_amount,
+                proof_id,
+                &nonce_manager
+            )
+            .await
+            .is_err()
         );
     }
 
@@ -111,37 +141,19 @@ mod tests {
             .await
             .expect("Should generate signature");
         let bad_nonce = 6060;
-        let signature = Signature {
-            nonce: bad_nonce,
-            ..signature
-        };
         assert!(
-            punish_verify(&signature, user, amount, proof_id, &nonce_manager)
-                .await
-                .is_err()
-        );
-    }
-
-    #[async_std::test]
-    async fn test_consumed_nonce() {
-        let (private_key, _) = random_keypair();
-        let nonce_manager = InMemoryNonceManager::default();
-        let user = "user".to_string();
-        let amount = 100;
-        let proof_id = 123;
-        let signature = punish_sign(&private_key, user.clone(), amount, proof_id, &nonce_manager)
+            punish_verify(
+                signature.signature,
+                &signature.signer,
+                bad_nonce,
+                user,
+                amount,
+                proof_id,
+                &nonce_manager
+            )
             .await
-            .expect("Should generate signature");
-        assert!(
-            punish_verify(&signature, user.clone(), amount, proof_id, &nonce_manager)
-                .await
-                .is_ok()
+            .is_err()
         );
-        // duplicate verification with the same nonce should fail
-        let err = punish_verify(&signature, user, amount, proof_id, &nonce_manager)
-            .await
-            .unwrap_err();
-        assert!(matches!(err, Error::NonceError(_)));
     }
 
     #[async_std::test]
@@ -156,9 +168,55 @@ mod tests {
             .expect("Should generate signature");
         let bad_proof_id = 6060;
         assert!(
-            punish_verify(&signature, user, amount, bad_proof_id, &nonce_manager)
-                .await
-                .is_err()
+            punish_verify(
+                signature.signature,
+                &signature.signer,
+                signature.nonce,
+                user,
+                amount,
+                bad_proof_id,
+                &nonce_manager
+            )
+            .await
+            .is_err()
         );
+    }
+
+    #[async_std::test]
+    async fn test_consumed_nonce() {
+        let (private_key, _) = random_keypair();
+        let nonce_manager = InMemoryNonceManager::default();
+        let user = "user".to_string();
+        let amount = 100;
+        let proof_id = 123;
+        let signature = punish_sign(&private_key, user.clone(), amount, proof_id, &nonce_manager)
+            .await
+            .expect("Should generate signature");
+        assert!(
+            punish_verify(
+                signature.signature.clone(),
+                &signature.signer,
+                signature.nonce,
+                user.clone(),
+                amount,
+                proof_id,
+                &nonce_manager
+            )
+            .await
+            .is_ok()
+        );
+        // duplicate verification with the same nonce should fail
+        let err = punish_verify(
+            signature.signature,
+            &signature.signer,
+            signature.nonce,
+            user,
+            amount,
+            proof_id,
+            &nonce_manager,
+        )
+        .await
+        .unwrap_err();
+        assert!(matches!(err, Error::NonceError(_)));
     }
 }

@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use sqlx::{Acquire, AnyPool, Row, any::AnyPoolOptions};
+use sqlx::{AnyPool, Row, any::AnyPoolOptions};
 
 use crate::identity::{
     IdtAmount, ModeratorProof, ProofId, SystemPenalty, UserAddress, error::Error,
@@ -41,32 +41,14 @@ impl PenaltyStorage for DatabasePenaltyStorage {
         user: UserAddress,
         proof: ModeratorProof,
     ) -> Result<(), Error> {
-        let mut tx = self.pool.begin().await?;
-        // this checks for user record
-        let row = sqlx::query("SELECT user FROM moderator_penalties WHERE user = ?")
+        sqlx::query("REPLACE INTO moderator_penalties (user, moderator, amount, proof_id, timestamp) VALUES (?, ?, ?, ?, ?)")
             .bind(&user)
-            .fetch_optional(tx.acquire().await?)
+            .bind(&proof.moderator)
+            .bind(proof.amount as i64)
+            .bind(proof.proof_id as i64)
+            .bind(proof.timestamp as i64)
+            .execute(&self.pool)
             .await?;
-        if row.is_some() {
-            sqlx::query("UPDATE moderator_penalties SET moderator = ?, amount = ?, proof_id = ?, timestamp = ? WHERE user = ?")
-                .bind(&proof.moderator)
-                .bind(proof.amount as i64)
-                .bind(proof.proof_id as i64)
-                .bind(proof.timestamp as i64)
-                .bind(&user)
-                .execute(tx.acquire().await?)
-                .await?;
-        } else {
-            sqlx::query("INSERT INTO moderator_penalties (user, moderator, amount, proof_id, timestamp) VALUES (?, ?, ?, ?, ?)")
-                .bind(&user)
-                .bind(&proof.moderator)
-                .bind(proof.amount as i64)
-                .bind(proof.proof_id as i64)
-                .bind(proof.timestamp as i64)
-                .execute(tx.acquire().await?)
-                .await?;
-        }
-        tx.commit().await?;
         Ok(())
     }
 
@@ -76,31 +58,13 @@ impl PenaltyStorage for DatabasePenaltyStorage {
         vouchee: UserAddress,
         penalty: SystemPenalty,
     ) -> Result<(), Error> {
-        let mut tx = self.pool.begin().await?;
-        let row =
-            sqlx::query("SELECT amount FROM forget_penalties WHERE user = ? AND forgotten = ?")
-                .bind(&user)
-                .bind(&vouchee)
-                .fetch_optional(tx.acquire().await?)
-                .await?;
-        if row.is_some() {
-            sqlx::query("UPDATE forget_penalties SET amount = ?, timestamp = ? WHERE user = ? AND forgotten = ?")
-                .bind(penalty.amount as i64)
-                .bind(penalty.timestamp as i64)
-                .bind(&user)
-                .bind(&vouchee)
-                .execute(tx.acquire().await?)
-                .await?;
-        } else {
-            sqlx::query("INSERT INTO forget_penalties (user, forgotten, amount, timestamp) VALUES (?, ?, ?, ?)")
-                .bind(&user)
-                .bind(&vouchee)
-                .bind(penalty.amount as i64)
-                .bind(penalty.timestamp as i64)
-                .execute(tx.acquire().await?)
-                .await?;
-        }
-        tx.commit().await?;
+        sqlx::query("REPLACE INTO forget_penalties (user, forgotten, amount, timestamp) VALUES (?, ?, ?, ?)")
+            .bind(&user)
+            .bind(&vouchee)
+            .bind(penalty.amount as i64)
+            .bind(penalty.timestamp as i64)
+            .execute(&self.pool)
+            .await?;
         Ok(())
     }
 

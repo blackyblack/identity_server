@@ -1,10 +1,16 @@
 use std::sync::Arc;
 
+use serde_json::json;
+use tide::{Response, http::mime};
+
 use crate::{
     admins::{AdminStorage, InMemoryAdminStorage},
-    identity::IdentityService,
+    identity::{IdentityService, UserAddress},
     servers::storage::{InMemoryServerStorage, ServerStorage},
-    verify::nonce::{InMemoryNonceManager, NonceManager},
+    verify::{
+        nonce::{InMemoryNonceManager, Nonce, NonceManager},
+        verify_message,
+    },
 };
 
 pub mod admins;
@@ -32,4 +38,37 @@ impl Default for State {
             server_storage: Arc::new(InMemoryServerStorage::default()),
         }
     }
+}
+
+pub async fn verify_admin_action(
+    state: &State,
+    sender: &UserAddress,
+    signature: String,
+    nonce: Nonce,
+    message_prefix: &str,
+) -> Result<(), Response> {
+    if state.admin_storage.check_admin(sender).await.is_err() {
+        return Err(Response::builder(403)
+            .body(json!({"error": "not admin"}))
+            .content_type(mime::JSON)
+            .build());
+    }
+
+    if verify_message(
+        signature,
+        sender,
+        nonce,
+        message_prefix,
+        &*state.nonce_manager,
+    )
+    .await
+    .is_err()
+    {
+        return Err(Response::builder(400)
+            .body(json!({"error": "signature verification failed"}))
+            .content_type(mime::JSON)
+            .build());
+    }
+
+    Ok(())
 }

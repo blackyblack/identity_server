@@ -6,8 +6,8 @@ use tide::{Request, Response, http::mime};
 
 use crate::{
     identity::UserAddress,
-    routes::State,
-    verify::{admin::admin_verify, nonce::Nonce, signature::Signature},
+    routes::{State, verify_admin_action},
+    verify::{admins::admin_set_server_message_prefix, nonce::Nonce},
 };
 
 #[derive(Deserialize)]
@@ -21,39 +21,18 @@ struct ServerRequest {
 pub async fn route(mut req: Request<State>) -> tide::Result {
     let body: ServerRequest = req.body_json().await?;
     let sender = body.from.clone();
+    let message_prefix = admin_set_server_message_prefix(body.address.clone());
 
-    if req
-        .state()
-        .admin_storage
-        .check_admin(&sender)
-        .await
-        .is_err()
+    if let Err(response) = verify_admin_action(
+        req.state(),
+        &sender,
+        body.signature,
+        body.nonce,
+        &message_prefix,
+    )
+    .await
     {
-        return Ok(Response::builder(403)
-            .body(json!({"error": "not admin"}))
-            .content_type(mime::JSON)
-            .build());
-    }
-
-    {
-        let signature = Signature {
-            signer: sender.clone(),
-            signature: body.signature,
-            nonce: body.nonce,
-        };
-        if admin_verify(
-            &signature,
-            body.address.clone(),
-            &*req.state().nonce_manager,
-        )
-        .await
-        .is_err()
-        {
-            return Ok(Response::builder(400)
-                .body(json!({"error": "signature verification failed"}))
-                .content_type(mime::JSON)
-                .build());
-        }
+        return Ok(response);
     }
 
     if req
@@ -89,7 +68,7 @@ mod tests {
     use crate::{
         admins::InMemoryAdminStorage,
         servers::storage::ServerInfo,
-        verify::{admin::admin_sign, random_keypair},
+        verify::{random_keypair, sign_message},
     };
     use serde_json::Value;
     use std::{collections::HashSet, sync::Arc};
@@ -116,9 +95,10 @@ mod tests {
             .await
             .unwrap();
 
-        let signature = admin_sign(&admin_priv, "server1".to_string(), &*state.nonce_manager)
+        let message_prefix = admin_set_server_message_prefix("server1".to_string());
+        let signature = sign_message(&admin_priv, &message_prefix, &*state.nonce_manager)
             .await
-            .expect("sign");
+            .expect("Should sign");
         let body = json!({
             "from": signature.signer,
             "signature": signature.signature,
@@ -151,5 +131,43 @@ mod tests {
                 .unwrap()
                 .contains_key("server1")
         );
+    }
+
+    #[async_std::test]
+    async fn test_no_privilege() {
+        // create a random keypair for a non-privileged user
+        let (private_key, _) = random_keypair();
+        let admins = HashSet::from(["other_admin".to_string()]);
+        let admin_storage = Arc::new(InMemoryAdminStorage::new(admins, HashSet::new()));
+        let state = State {
+            admin_storage: admin_storage.clone(),
+            ..Default::default()
+        };
+
+        let req_url = "/remove_server";
+        let message_prefix = admin_set_server_message_prefix("server1".to_string());
+        let signature = sign_message(&private_key, &message_prefix, &*state.nonce_manager)
+            .await
+            .expect("Should sign");
+        let body = json!({
+            "from": signature.signer,
+            "signature": signature.signature,
+            "nonce": signature.nonce,
+            "address": "server1",
+        });
+
+        let mut req = HttpRequest::new(
+            tide::http::Method::Post,
+            Url::parse(&format!("http://example.com{}", req_url)).unwrap(),
+        );
+        req.set_body(serde_json::to_string(&body).unwrap());
+        req.set_content_type(mime::JSON);
+
+        let mut server = tide::with_state(state);
+        server.at("/remove_server").post(route);
+
+        let response: Response = server.respond(req).await.unwrap();
+
+        assert_eq!(response.status(), 403);
     }
 }
