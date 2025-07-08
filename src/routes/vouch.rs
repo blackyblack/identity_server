@@ -98,6 +98,7 @@ mod tests {
             proof::prove,
             tests::{MODERATOR, PROOF_ID, USER_A},
         },
+        numbers::Rational,
         verify::{proxy::proxy_sign, random_keypair, vouch::vouch_sign},
     };
     use serde_json::Value;
@@ -163,7 +164,7 @@ mod tests {
                 server_addr.clone(),
                 ServerInfo {
                     url: "http://x".into(),
-                    scale: 1.0,
+                    scale: Rational::default(),
                 },
             )
             .await
@@ -315,7 +316,7 @@ mod tests {
                 server_addr.clone(),
                 ServerInfo {
                     url: "http://x".into(),
-                    scale: 1.0,
+                    scale: Rational::default(),
                 },
             )
             .await

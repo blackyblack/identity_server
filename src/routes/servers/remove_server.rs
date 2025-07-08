@@ -67,6 +67,7 @@ mod tests {
     use super::*;
     use crate::{
         admins::InMemoryAdminStorage,
+        numbers::Rational,
         servers::storage::ServerInfo,
         verify::{random_keypair, sign_message},
     };
@@ -89,7 +90,7 @@ mod tests {
                 "server1".to_string(),
                 ServerInfo {
                     url: "http://e".into(),
-                    scale: 1.0,
+                    scale: Rational::default(),
                 },
             )
             .await

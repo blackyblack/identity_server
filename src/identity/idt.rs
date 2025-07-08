@@ -1,12 +1,15 @@
 use std::collections::HashMap;
 
-use crate::identity::{
-    IdentityService, IdtAmount, UserAddress,
-    decay::{balance_after_decay, proof_decay, vouch_decay},
-    error::Error,
-    punish::penalty,
-    tree_walk::{ChildrenSelector, Visitor, walk_tree},
-    vouch::vouchers,
+use crate::{
+    identity::{
+        IdentityService, IdtAmount, UserAddress,
+        decay::{balance_after_decay, proof_decay, vouch_decay},
+        error::Error,
+        punish::penalty,
+        tree_walk::{ChildrenSelector, Visitor, walk_tree},
+        vouch::vouchers,
+    },
+    numbers::Rational,
 };
 
 pub const TOP_VOUCHERS_SIZE: u16 = 5;
@@ -54,6 +57,8 @@ impl Visitor for VouchTree<'_> {
         visited_branch: &im::HashSet<UserAddress>,
         balances: &HashMap<UserAddress, IdtAmount>,
     ) -> Result<IdtAmount, Error> {
+        let voucher_scale = Rational::new(VOUCHER_WEIGHT_RATIO.0, VOUCHER_WEIGHT_RATIO.1)
+            .expect("VOUCHER_WEIGHT_RATIO denominator must not be zero");
         let proven_balance = {
             match self.service.proof(node).await? {
                 // fallback to genesis balance if proof is not found
@@ -74,9 +79,7 @@ impl Visitor for VouchTree<'_> {
         let mut balance_from_vouchers = 0;
         for (user, balance) in &top_vouchers {
             let voucher_balance_decay = vouch_decay(self.service, node, user).await?;
-            let voucher_balance = balance
-                .saturating_mul(VOUCHER_WEIGHT_RATIO.0.into())
-                .saturating_div(VOUCHER_WEIGHT_RATIO.1.into());
+            let voucher_balance = voucher_scale.mul(*balance);
             balance_from_vouchers += balance_after_decay(voucher_balance, voucher_balance_decay);
         }
         let penalty = penalty(self.service, node).await?;
