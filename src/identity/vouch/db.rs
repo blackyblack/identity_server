@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use async_trait::async_trait;
-use sqlx::{Acquire, AnyPool, Row, any::AnyPoolOptions};
+use sqlx::{AnyPool, Row, any::AnyPoolOptions};
 
 use crate::identity::{UserAddress, error::Error, vouch::storage::VouchStorage};
 
@@ -34,29 +34,12 @@ impl DatabaseVouchStorage {
 #[async_trait]
 impl VouchStorage for DatabaseVouchStorage {
     async fn vouch(&self, from: UserAddress, to: UserAddress, timestamp: u64) -> Result<(), Error> {
-        let mut tx = self.pool.begin().await?;
-        let row = sqlx::query("SELECT timestamp FROM vouches WHERE voucher = ? AND vouchee = ?")
+        sqlx::query("REPLACE INTO vouches (voucher, vouchee, timestamp) VALUES (?, ?, ?)")
             .bind(&from)
             .bind(&to)
-            .fetch_optional(tx.acquire().await?)
+            .bind(timestamp as i64)
+            .execute(&self.pool)
             .await?;
-        // do not use upsert to support SQLite
-        if row.is_some() {
-            sqlx::query("UPDATE vouches SET timestamp = ? WHERE voucher = ? AND vouchee = ?")
-                .bind(timestamp as i64)
-                .bind(&from)
-                .bind(&to)
-                .execute(tx.acquire().await?)
-                .await?;
-        } else {
-            sqlx::query("INSERT INTO vouches (voucher, vouchee, timestamp) VALUES (?, ?, ?)")
-                .bind(&from)
-                .bind(&to)
-                .bind(timestamp as i64)
-                .execute(tx.acquire().await?)
-                .await?;
-        }
-        tx.commit().await?;
         Ok(())
     }
 

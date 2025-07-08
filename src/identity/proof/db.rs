@@ -59,32 +59,14 @@ impl ProofStorage for DatabaseProofStorage {
     }
 
     async fn set_proof(&self, user: UserAddress, proof: ModeratorProof) -> Result<(), Error> {
-        let mut tx = self.pool.begin().await?;
-        // this checks for user record
-        let row = sqlx::query("SELECT user FROM proofs WHERE user = ?")
+        sqlx::query("REPLACE INTO proofs (user, moderator, amount, proof_id, timestamp) VALUES (?, ?, ?, ?, ?)")
             .bind(&user)
-            .fetch_optional(tx.acquire().await?)
+            .bind(&proof.moderator)
+            .bind(proof.amount as i64)
+            .bind(proof.proof_id as i64)
+            .bind(proof.timestamp as i64)
+            .execute(&self.pool)
             .await?;
-        if row.is_some() {
-            sqlx::query("UPDATE proofs SET moderator = ?, amount = ?, proof_id = ?, timestamp = ? WHERE user = ?")
-                .bind(&proof.moderator)
-                .bind(proof.amount as i64)
-                .bind(proof.proof_id as i64)
-                .bind(proof.timestamp as i64)
-                .bind(&user)
-                .execute(tx.acquire().await?)
-                .await?;
-        } else {
-            sqlx::query("INSERT INTO proofs (user, moderator, amount, proof_id, timestamp) VALUES (?, ?, ?, ?, ?)")
-                .bind(&user)
-                .bind(&proof.moderator)
-                .bind(proof.amount as i64)
-                .bind(proof.proof_id as i64)
-                .bind(proof.timestamp as i64)
-                .execute(tx.acquire().await?)
-                .await?;
-        }
-        tx.commit().await?;
         Ok(())
     }
 

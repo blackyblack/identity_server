@@ -7,7 +7,7 @@ use tide::{Request, Response, http::mime};
 use crate::{
     identity::{UserAddress, forget::forget, idt::balance},
     routes::State,
-    verify::{forget::forget_verify, nonce::Nonce, signature::Signature},
+    verify::{forget::forget_verify, nonce::Nonce},
 };
 
 #[derive(Deserialize)]
@@ -23,14 +23,15 @@ pub async fn route(mut req: Request<State>) -> tide::Result {
     let voucher = body.from;
 
     {
-        let signature = Signature {
-            signer: voucher.clone(),
-            signature: body.signature,
-            nonce: body.nonce,
-        };
-        if forget_verify(&signature, vouchee.clone(), &*req.state().nonce_manager)
-            .await
-            .is_err()
+        if forget_verify(
+            body.signature,
+            &voucher,
+            body.nonce,
+            vouchee.clone(),
+            &*req.state().nonce_manager,
+        )
+        .await
+        .is_err()
         {
             return Ok(Response::builder(400)
                 .body(json!({"error": "signature verification failed"}))

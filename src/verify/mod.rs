@@ -1,16 +1,22 @@
 use ethers_core::{rand, types::H160};
 use ethers_signers::{LocalWallet, Signer};
 
-use crate::{identity::UserAddress, verify::error::Error};
+use crate::{
+    identity::UserAddress,
+    verify::{
+        error::Error,
+        nonce::{Nonce, NonceManager},
+        signature::{Signature, consume, generate},
+    },
+};
 
-pub mod admin;
+pub mod admins;
 pub mod error;
 pub mod forget;
-pub mod moderator;
 pub mod nonce;
 pub mod proof;
+pub mod proxy;
 pub mod punish;
-pub mod servers;
 pub mod signature;
 pub mod vouch;
 
@@ -36,4 +42,31 @@ pub fn private_key_to_wallet(private_key_hex: &str) -> Result<LocalWallet, Error
 pub fn private_key_to_address(private_key_hex: &str) -> Result<UserAddress, Error> {
     let wallet = private_key_to_wallet(private_key_hex)?;
     Ok(address_to_string(&wallet.address()))
+}
+
+pub async fn verify_message(
+    signature: String,
+    signer: &UserAddress,
+    nonce: Nonce,
+    message_prefix: &str,
+    nonce_manager: &dyn NonceManager,
+) -> Result<(), Error> {
+    let message = format!("{}/{}", message_prefix, nonce);
+    consume(signature, signer, message, nonce, nonce_manager).await
+}
+
+pub async fn sign_message(
+    private_key_hex: &str,
+    message_prefix: &str,
+    nonce_manager: &dyn NonceManager,
+) -> Result<Signature, Error> {
+    let sender = private_key_to_address(private_key_hex)?;
+    let nonce = nonce_manager.next_nonce(&sender).await?;
+    let message = format!("{}/{}", message_prefix, nonce);
+    let signature = generate(private_key_hex, message).await?;
+    Ok(Signature {
+        signer: sender,
+        signature,
+        nonce,
+    })
 }

@@ -7,21 +7,21 @@ use tide::{Request, Response, http::mime};
 use crate::{
     identity::UserAddress,
     routes::{State, verify_admin_action},
-    verify::{admins::admin_message_prefix, nonce::Nonce},
+    verify::{admins::admin_set_server_message_prefix, nonce::Nonce},
 };
 
 #[derive(Deserialize)]
-struct AdminRequest {
+struct ServerRequest {
     from: UserAddress,
     signature: String,
     nonce: Nonce,
+    address: UserAddress,
 }
 
 pub async fn route(mut req: Request<State>) -> tide::Result {
-    let recipient = req.param("user")?.to_string();
-    let body: AdminRequest = req.body_json().await?;
+    let body: ServerRequest = req.body_json().await?;
     let sender = body.from.clone();
-    let message_prefix = admin_message_prefix(recipient.clone());
+    let message_prefix = admin_set_server_message_prefix(body.address.clone());
 
     if let Err(response) = verify_admin_action(
         req.state(),
@@ -37,19 +37,19 @@ pub async fn route(mut req: Request<State>) -> tide::Result {
 
     if req
         .state()
-        .admin_storage
-        .remove_admin(&sender, recipient.clone())
+        .server_storage
+        .remove_server(body.address.clone())
         .await
         .is_err()
     {
         return Ok(Response::builder(400)
-            .body(json!({"error": "failed to add admin"}))
+            .body(json!({"error": "failed to remove server"}))
             .content_type(mime::JSON)
             .build());
     }
 
     let response: HashMap<String, serde_json::Value> = HashMap::from([
-        ("removed".into(), recipient.into()),
+        ("removed".into(), body.address.into()),
         ("from".into(), sender.into()),
         ("nonce".into(), body.nonce.into()),
     ]);
@@ -64,66 +64,78 @@ pub async fn route(mut req: Request<State>) -> tide::Result {
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::HashSet, sync::Arc};
-
+    use super::*;
     use crate::{
-        admins::{AdminStorage, InMemoryAdminStorage},
+        admins::InMemoryAdminStorage,
+        servers::storage::ServerInfo,
         verify::{random_keypair, sign_message},
     };
-
-    use super::*;
     use serde_json::Value;
+    use std::{collections::HashSet, sync::Arc};
     use tide::http::{Request as HttpRequest, Response, Url};
 
     #[async_std::test]
     async fn test_basic() {
-        let (private_key, admin_address) = random_keypair();
-        let other_admin = "other_admin".to_string();
-        let admins = HashSet::from([admin_address.clone(), other_admin.clone()]);
+        let (admin_priv, admin_addr) = random_keypair();
+        let admins = HashSet::from([admin_addr.clone()]);
         let admin_storage = Arc::new(InMemoryAdminStorage::new(admins, HashSet::new()));
         let state = State {
             admin_storage: admin_storage.clone(),
             ..Default::default()
         };
+        state
+            .server_storage
+            .add_server(
+                "server1".to_string(),
+                ServerInfo {
+                    url: "http://e".into(),
+                    scale: 1.0,
+                },
+            )
+            .await
+            .unwrap();
 
-        let req_url = format!("/remove_admin/{other_admin}");
-
-        // sign the admin request
-        let message_prefix = admin_message_prefix(other_admin.clone());
-        let signature = sign_message(&private_key, &message_prefix, &*state.nonce_manager)
+        let message_prefix = admin_set_server_message_prefix("server1".to_string());
+        let signature = sign_message(&admin_priv, &message_prefix, &*state.nonce_manager)
             .await
             .expect("Should sign");
-
         let body = json!({
             "from": signature.signer,
             "signature": signature.signature,
             "nonce": signature.nonce,
+            "address": "server1"
         });
 
         let mut req = HttpRequest::new(
             tide::http::Method::Post,
-            Url::parse(&format!("http://example.com{}", req_url)).unwrap(),
+            Url::parse("http://example.com/remove_server").unwrap(),
         );
         req.set_body(serde_json::to_string(&body).unwrap());
         req.set_content_type(mime::JSON);
 
-        let mut server = tide::with_state(state);
-        server.at("/remove_admin/:user").post(route);
+        let mut server = tide::with_state(state.clone());
+        server.at("/remove_server").post(route);
 
         let mut response: Response = server.respond(req).await.unwrap();
 
         assert_eq!(response.status(), 200);
         let body: Value = response.body_json().await.unwrap();
-        assert_eq!(body["removed"], other_admin.clone());
-        assert_eq!(body["from"], admin_address);
+        assert_eq!(body["removed"], "server1");
+        assert_eq!(body["from"], admin_addr);
         assert_eq!(body["nonce"], signature.nonce);
-
-        // verify the old admin was removed
-        assert!(admin_storage.check_admin(&other_admin).await.is_err());
+        assert!(
+            !state
+                .server_storage
+                .servers()
+                .await
+                .unwrap()
+                .contains_key("server1")
+        );
     }
 
     #[async_std::test]
     async fn test_no_privilege() {
+        // create a random keypair for a non-privileged user
         let (private_key, _) = random_keypair();
         let admins = HashSet::from(["other_admin".to_string()]);
         let admin_storage = Arc::new(InMemoryAdminStorage::new(admins, HashSet::new()));
@@ -132,18 +144,16 @@ mod tests {
             ..Default::default()
         };
 
-        let user = "new_admin_user".to_string();
-        let req_url = format!("/remove_admin/{user}");
-
-        let message_prefix = admin_message_prefix(user);
+        let req_url = "/remove_server";
+        let message_prefix = admin_set_server_message_prefix("server1".to_string());
         let signature = sign_message(&private_key, &message_prefix, &*state.nonce_manager)
             .await
             .expect("Should sign");
-
         let body = json!({
             "from": signature.signer,
             "signature": signature.signature,
             "nonce": signature.nonce,
+            "address": "server1",
         });
 
         let mut req = HttpRequest::new(
@@ -154,7 +164,7 @@ mod tests {
         req.set_content_type(mime::JSON);
 
         let mut server = tide::with_state(state);
-        server.at("/remove_admin/:user").post(route);
+        server.at("/remove_server").post(route);
 
         let response: Response = server.respond(req).await.unwrap();
 

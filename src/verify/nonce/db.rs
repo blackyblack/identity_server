@@ -45,20 +45,11 @@ impl NonceManager for DatabaseNonceManager {
             return Err(Error::NonceUsedError(nonce));
         }
 
-        // do not use upsert to support SQLite
-        if row.is_some() {
-            sqlx::query("UPDATE nonces SET used_nonce = ? WHERE user = ?")
-                .bind(nonce as i64)
-                .bind(user)
-                .execute(tx.acquire().await?)
-                .await?;
-        } else {
-            sqlx::query("INSERT INTO nonces (user, used_nonce) VALUES(?, ?)")
-                .bind(user)
-                .bind(nonce as i64)
-                .execute(tx.acquire().await?)
-                .await?;
-        }
+        sqlx::query("REPLACE INTO nonces (user, used_nonce) VALUES(?, ?)")
+            .bind(user)
+            .bind(nonce as i64)
+            .execute(tx.acquire().await?)
+            .await?;
         tx.commit().await?;
         Ok(())
     }

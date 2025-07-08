@@ -13,6 +13,7 @@ use crate::{
         punish::{db::DatabasePenaltyStorage, storage::PenaltyStorage},
         vouch::{db::DatabaseVouchStorage, storage::VouchStorage},
     },
+    servers::{db::DatabaseServerStorage, storage::ServerStorage},
     verify::nonce::{NonceManager, db::DatabaseNonceManager},
 };
 
@@ -27,6 +28,7 @@ pub struct Storage {
     pub penalty_storage: Arc<dyn PenaltyStorage>,
     pub admin_storage: Arc<dyn AdminStorage>,
     pub nonce_manager: Arc<dyn NonceManager>,
+    pub server_storage: Arc<dyn ServerStorage>,
 }
 
 pub async fn create_database_storage(
@@ -46,6 +48,9 @@ pub async fn create_database_storage(
     let admin_storage_connect = DatabaseAdminStorage::new(&db_url, admins, moderators)
         .await
         .map_err(|e| Error::new(ErrorKind::NotConnected, e.to_string()))?;
+    let server_storage_connect = DatabaseServerStorage::new(&db_url)
+        .await
+        .map_err(|e| Error::new(ErrorKind::NotConnected, e.to_string()))?;
     let nonce_manager = DatabaseNonceManager::new(&db_url)
         .await
         .map_err(|e| Error::new(ErrorKind::NotConnected, e.to_string()))?;
@@ -55,6 +60,7 @@ pub async fn create_database_storage(
         penalty_storage: Arc::new(penalty_storage_connect),
         admin_storage: Arc::new(admin_storage_connect),
         nonce_manager: Arc::new(nonce_manager),
+        server_storage: Arc::new(server_storage_connect),
     })
 }
 
