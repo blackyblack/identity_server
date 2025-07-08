@@ -52,9 +52,10 @@ impl ServerStorage for DatabaseServerStorage {
     }
 
     async fn servers(&self) -> Result<HashMap<UserAddress, ServerInfo>, Error> {
-        let rows = sqlx::query("SELECT address, url, scale_numerator, scale_denominator FROM servers")
-            .fetch_all(&self.pool)
-            .await?;
+        let rows =
+            sqlx::query("SELECT address, url, scale_numerator, scale_denominator FROM servers")
+                .fetch_all(&self.pool)
+                .await?;
         Ok(rows
             .into_iter()
             .map(|r| {
