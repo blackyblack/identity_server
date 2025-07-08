@@ -4,12 +4,12 @@ use async_std::sync::RwLock;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
-use crate::identity::UserAddress;
+use crate::{identity::UserAddress, numbers::Rational};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ServerInfo {
     pub url: String,
-    pub scale: f64,
+    pub scale: Rational,
 }
 
 #[async_trait]
@@ -69,7 +69,7 @@ mod tests {
         let server_address = "server1".to_string();
         let server_info = ServerInfo {
             url: "http://example.com".to_string(),
-            scale: 1.0,
+            scale: Rational::default(),
         };
 
         // initially, there should be no servers
@@ -104,12 +104,12 @@ mod tests {
 
         let info1 = ServerInfo {
             url: "http://example1.com".to_string(),
-            scale: 1.0,
+            scale: Rational::default(),
         };
 
         let info2 = ServerInfo {
             url: "http://example2.com".to_string(),
-            scale: 2.0,
+            scale: Rational::new(2, 1).unwrap(),
         };
 
         // add two servers
@@ -151,12 +151,12 @@ mod tests {
 
         let info1 = ServerInfo {
             url: "http://example1.com".to_string(),
-            scale: 1.0,
+            scale: Rational::default(),
         };
 
         let info2 = ServerInfo {
             url: "http://example2.com".to_string(),
-            scale: 2.0,
+            scale: Rational::new(2, 1).unwrap(),
         };
 
         // add a server

@@ -5,6 +5,7 @@ use sqlx::{AnyPool, Row, any::AnyPoolOptions};
 
 use crate::{
     identity::UserAddress,
+    numbers::Rational,
     servers::{
         error::Error,
         storage::{ServerInfo, ServerStorage},
@@ -22,7 +23,7 @@ impl DatabaseServerStorage {
             .max_connections(1)
             .connect(url)
             .await?;
-        sqlx::query("CREATE TABLE IF NOT EXISTS servers (address TEXT PRIMARY KEY, url TEXT NOT NULL, scale REAL NOT NULL)")
+        sqlx::query("CREATE TABLE IF NOT EXISTS servers (address TEXT PRIMARY KEY, url TEXT NOT NULL, scale_numerator INTEGER NOT NULL, scale_denominator INTEGER NOT NULL)")
             .execute(&pool)
             .await?;
         Ok(Self { pool })
@@ -32,10 +33,11 @@ impl DatabaseServerStorage {
 #[async_trait]
 impl ServerStorage for DatabaseServerStorage {
     async fn add_server(&self, address: UserAddress, info: ServerInfo) -> Result<(), Error> {
-        sqlx::query("REPLACE INTO servers (address, url, scale) VALUES (?, ?, ?)")
+        sqlx::query("REPLACE INTO servers (address, url, scale_numerator, scale_denominator) VALUES (?, ?, ?, ?)")
             .bind(address)
             .bind(info.url)
-            .bind(info.scale)
+            .bind(info.scale.numerator() as i32)
+            .bind(info.scale.denominator() as i32)
             .execute(&self.pool)
             .await?;
         Ok(())
@@ -56,13 +58,11 @@ impl ServerStorage for DatabaseServerStorage {
         Ok(rows
             .into_iter()
             .map(|r| {
-                (
-                    r.get::<String, _>(0),
-                    ServerInfo {
-                        url: r.get::<String, _>(1),
-                        scale: r.get::<f64, _>(2),
-                    },
-                )
+                let key = r.get::<String, _>(0);
+                let url = r.get::<String, _>(1);
+                let scale = Rational::new(r.get::<i32, _>(2) as u32, r.get::<i32, _>(3) as u32)
+                    .expect("Scale factor should not be NaN");
+                (key, ServerInfo { url, scale })
             })
             .collect())
     }
@@ -85,7 +85,7 @@ mod tests {
         // add a server
         let info1 = ServerInfo {
             url: "http://example1.com".to_string(),
-            scale: 1.0,
+            scale: Rational::default(),
         };
         storage
             .add_server(server1.clone(), info1.clone())
@@ -103,7 +103,7 @@ mod tests {
         // add another server
         let info2 = ServerInfo {
             url: "http://example2.com".to_string(),
-            scale: 2.0,
+            scale: Rational::new(2, 1).unwrap(),
         };
         storage
             .add_server(server2.clone(), info2.clone())
@@ -119,7 +119,7 @@ mod tests {
         // update a server
         let updated_info = ServerInfo {
             url: "http://updated.com".to_string(),
-            scale: 3.0,
+            scale: Rational::new(3, 1).unwrap(),
         };
         storage
             .add_server(server1.clone(), updated_info.clone())

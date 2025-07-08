@@ -15,7 +15,7 @@ pub async fn route(req: Request<State>) -> tide::Result {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::servers::storage::ServerInfo;
+    use crate::{numbers::Rational, servers::storage::ServerInfo};
     use serde_json::Value;
     use tide::http::{Request as HttpRequest, Response, Url};
 
@@ -28,7 +28,7 @@ mod tests {
                 "server1".to_string(),
                 ServerInfo {
                     url: "http://e".into(),
-                    scale: 1.0,
+                    scale: Rational::default(),
                 },
             )
             .await
