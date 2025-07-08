@@ -6,6 +6,7 @@ use sqlx::any::AnyPoolOptions;
 
 use crate::admins::{AdminStorage, error::Error};
 use crate::identity::UserAddress;
+use crate::migration;
 
 pub struct DatabaseAdminStorage {
     pool: AnyPool,
@@ -22,12 +23,7 @@ impl DatabaseAdminStorage {
             .max_connections(1)
             .connect(url)
             .await?;
-        sqlx::query("CREATE TABLE IF NOT EXISTS admins (user TEXT PRIMARY KEY)")
-            .execute(&pool)
-            .await?;
-        sqlx::query("CREATE TABLE IF NOT EXISTS moderators (user TEXT PRIMARY KEY)")
-            .execute(&pool)
-            .await?;
+        migration::run_migrations(&pool).await?;
         for admin in admins {
             sqlx::query("INSERT OR IGNORE INTO admins (user) VALUES (?)")
                 .bind(admin)

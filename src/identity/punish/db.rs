@@ -5,6 +5,7 @@ use crate::identity::{
     IdtAmount, ModeratorProof, ProofId, SystemPenalty, UserAddress, error::Error,
     punish::storage::PenaltyStorage,
 };
+use crate::migration;
 
 pub struct DatabasePenaltyStorage {
     pool: AnyPool,
@@ -17,19 +18,7 @@ impl DatabasePenaltyStorage {
             .max_connections(1)
             .connect(url)
             .await?;
-        sqlx::query(
-            "CREATE TABLE IF NOT EXISTS moderator_penalties (user TEXT PRIMARY KEY, moderator TEXT NOT NULL, amount INTEGER NOT NULL, proof_id INTEGER NOT NULL, timestamp INTEGER NOT NULL)"
-        )
-        .execute(&pool)
-        .await?;
-        sqlx::query(
-            "CREATE TABLE IF NOT EXISTS forget_penalties (user TEXT NOT NULL, forgotten TEXT NOT NULL, amount INTEGER NOT NULL, timestamp INTEGER NOT NULL, PRIMARY KEY(user, forgotten))"
-        )
-        .execute(&pool)
-        .await?;
-        sqlx::query("CREATE INDEX IF NOT EXISTS forget_penalties_idx ON forget_penalties(user)")
-            .execute(&pool)
-            .await?;
+        migration::run_migrations(&pool).await?;
         Ok(Self { pool })
     }
 }

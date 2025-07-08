@@ -6,6 +6,7 @@ use sqlx::{Acquire, AnyPool, Row, any::AnyPoolOptions};
 use crate::identity::{
     IdtAmount, ModeratorProof, ProofId, UserAddress, error::Error, proof::storage::ProofStorage,
 };
+use crate::migration;
 
 pub struct DatabaseProofStorage {
     pool: AnyPool,
@@ -18,16 +19,7 @@ impl DatabaseProofStorage {
             .max_connections(1)
             .connect(url)
             .await?;
-        sqlx::query(
-            "CREATE TABLE IF NOT EXISTS proofs (user TEXT PRIMARY KEY, moderator TEXT NOT NULL, amount INTEGER NOT NULL, proof_id INTEGER NOT NULL, timestamp INTEGER NOT NULL)"
-        )
-        .execute(&pool)
-        .await?;
-        sqlx::query(
-            "CREATE TABLE IF NOT EXISTS genesis (user TEXT PRIMARY KEY, balance INTEGER NOT NULL)",
-        )
-        .execute(&pool)
-        .await?;
+        migration::run_migrations(&pool).await?;
         Ok(Self { pool })
     }
 }
