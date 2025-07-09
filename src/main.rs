@@ -77,6 +77,7 @@ async fn main() {
         vouches: storage.vouch_storage,
         proofs: storage.proof_storage,
         penalties: storage.penalty_storage,
+        external_vouches: storage.external_vouch_storage,
     };
     identity_service
         .set_genesis(genesis)
