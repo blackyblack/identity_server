@@ -68,6 +68,26 @@ pub async fn route(mut req: Request<State>) -> tide::Result {
                     .content_type(mime::JSON)
                     .build());
             }
+            crate::identity::external_vouch::add_external_vouch(
+                &req.state().identity_service,
+                voucher.clone(),
+                vouchee.clone(),
+                server_sig.signer.clone(),
+            )
+            .await?;
+            let voucher_balance =
+                balance(&req.state().identity_service, &voucher).await?;
+            let response: HashMap<String, serde_json::Value> = HashMap::from([
+                ("from".into(), voucher.into()),
+                ("to".into(), vouchee.into()),
+                ("idt".into(), voucher_balance.to_string().into()),
+                ("nonce".into(), body.nonce.into()),
+            ]);
+            let response = Response::builder(200)
+                .body(json!(response))
+                .content_type(mime::JSON)
+                .build();
+            return Ok(response);
         }
     }
     vouch(
@@ -97,6 +117,7 @@ mod tests {
         identity::{
             proof::prove,
             tests::{MODERATOR, PROOF_ID, USER_A},
+            vouch::{vouchers, vouchees},
         },
         numbers::Rational,
         verify::{proxy::proxy_sign, random_keypair, vouch::vouch_sign},
@@ -193,11 +214,29 @@ mod tests {
         req.set_body(body);
         req.set_content_type(mime::JSON);
 
-        let mut server = tide::with_state(state);
+        let mut server = tide::with_state(state.clone());
         server.at("/vouch/:user").post(route);
 
         let response: Response = server.respond(req).await.unwrap();
         assert_eq!(response.status(), 200);
+
+        let records = state.identity_service.external_vouches().await.unwrap();
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].voucher, user_address);
+        assert_eq!(records[0].vouchee, user_b);
+        assert_eq!(records[0].server, server_addr);
+        assert!(
+            vouchers(&state.identity_service, &user_b.to_string())
+                .await
+                .unwrap()
+                .is_empty()
+        );
+        assert!(
+            vouchees(&state.identity_service, &user_address.to_string())
+                .await
+                .unwrap()
+                .is_empty()
+        );
     }
 
     #[async_std::test]
