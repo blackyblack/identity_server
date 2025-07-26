@@ -13,6 +13,7 @@ use crate::{
 #[derive(Deserialize, Serialize, Clone)]
 struct FromField {
     user: UserAddress,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     server: Option<UserAddress>,
 }
