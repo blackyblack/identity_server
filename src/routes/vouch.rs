@@ -4,12 +4,10 @@ use serde::Deserialize;
 use serde_json::json;
 use tide::{Request, Response, http::mime};
 
-#[cfg(test)]
-use crate::servers::storage::ServerInfo;
 use crate::{
     identity::{UserAddress, idt::balance, vouch::vouch},
     routes::State,
-    verify::{nonce::Nonce, proxy::proxy_verify, signature::Signature, vouch::vouch_verify},
+    verify::{nonce::Nonce, vouch::vouch_verify},
 };
 
 #[derive(Deserialize)]
@@ -17,58 +15,26 @@ struct VouchRequest {
     from: UserAddress,
     signature: String,
     nonce: Nonce,
-    proxy_signature: Option<Signature>,
 }
 
 pub async fn route(mut req: Request<State>) -> tide::Result {
     let vouchee = req.param("user")?.to_string();
     let body: VouchRequest = req.body_json().await?;
     let voucher = body.from;
+    if vouch_verify(
+        body.signature,
+        &voucher,
+        body.nonce,
+        vouchee.clone(),
+        &*req.state().nonce_manager,
+    )
+    .await
+    .is_err()
     {
-        let signature = Signature {
-            signer: voucher.clone(),
-            signature: body.signature.clone(),
-            nonce: body.nonce,
-        };
-        if vouch_verify(
-            body.signature,
-            &voucher,
-            body.nonce,
-            vouchee.clone(),
-            &*req.state().nonce_manager,
-        )
-        .await
-        .is_err()
-        {
-            return Ok(Response::builder(400)
-                .body(json!({"error": "signature verification failed"}))
-                .content_type(mime::JSON)
-                .build());
-        }
-        if let Some(server_sig) = &body.proxy_signature {
-            let servers = req.state().server_storage.servers().await?;
-            if !servers.contains_key(&server_sig.signer) {
-                return Ok(Response::builder(403)
-                    .body(json!({"error": "server not allowed"}))
-                    .content_type(mime::JSON)
-                    .build());
-            }
-            if proxy_verify(
-                server_sig.signature.clone(),
-                &server_sig.signer,
-                server_sig.nonce,
-                &signature.signature,
-                &*req.state().nonce_manager,
-            )
-            .await
-            .is_err()
-            {
-                return Ok(Response::builder(400)
-                    .body(json!({"error": "server signature verification failed"}))
-                    .content_type(mime::JSON)
-                    .build());
-            }
-        }
+        return Ok(Response::builder(400)
+            .body(json!({"error": "signature verification failed"}))
+            .content_type(mime::JSON)
+            .build());
     }
     vouch(
         &req.state().identity_service,
@@ -98,8 +64,7 @@ mod tests {
             proof::prove,
             tests::{MODERATOR, PROOF_ID, USER_A},
         },
-        numbers::Rational,
-        verify::{proxy::proxy_sign, random_keypair, vouch::vouch_sign},
+        verify::{random_keypair, vouch::vouch_sign},
     };
     use serde_json::Value;
     use tide::http::{Request as HttpRequest, Response, Url};
@@ -154,53 +119,6 @@ mod tests {
     }
 
     #[async_std::test]
-    async fn test_server_vouch() {
-        let state = State::default();
-        let (user_priv, user_address) = random_keypair();
-        let (server_priv, server_addr) = random_keypair();
-        state
-            .server_storage
-            .add_server(
-                server_addr.clone(),
-                ServerInfo {
-                    url: "http://x".into(),
-                    scale: Rational::default(),
-                },
-            )
-            .await
-            .unwrap();
-
-        let user_b = "userB";
-
-        let user_sig = vouch_sign(&user_priv, user_b.to_string(), &*state.nonce_manager)
-            .await
-            .expect("sign");
-        let server_sig = proxy_sign(&server_priv, &user_sig.signature, &*state.nonce_manager)
-            .await
-            .expect("server sign");
-        let body = json!({
-            "from": user_address,
-            "signature": user_sig.signature,
-            "nonce": user_sig.nonce,
-            "proxy_signature": server_sig,
-        });
-
-        let req_url = format!("/vouch/{user_b}");
-        let mut req = HttpRequest::new(
-            tide::http::Method::Post,
-            Url::parse(&format!("http://example.com{}", req_url)).unwrap(),
-        );
-        req.set_body(body);
-        req.set_content_type(mime::JSON);
-
-        let mut server = tide::with_state(state);
-        server.at("/vouch/:user").post(route);
-
-        let response: Response = server.respond(req).await.unwrap();
-        assert_eq!(response.status(), 200);
-    }
-
-    #[async_std::test]
     async fn test_bad_request_format() {
         let state = State::default();
         let user_b = "userB";
@@ -225,45 +143,6 @@ mod tests {
         assert!(
             response.status().is_client_error(),
             "Expected a client error for bad request format"
-        );
-    }
-
-    #[async_std::test]
-    async fn test_server_not_allowed() {
-        let state = State::default();
-        let (user_priv, user_address) = random_keypair();
-        let (server_priv, _) = random_keypair();
-
-        let user_b = "userB";
-
-        let user_sig = vouch_sign(&user_priv, user_b.to_string(), &*state.nonce_manager)
-            .await
-            .expect("sign");
-        let server_sig = proxy_sign(&server_priv, &user_sig.signature, &*state.nonce_manager)
-            .await
-            .expect("Server sign");
-        let body = json!({
-            "from": user_address,
-            "signature": user_sig.signature,
-            "nonce": user_sig.nonce,
-            "proxy_signature": server_sig,
-        });
-
-        let req_url = format!("/vouch/{user_b}");
-        let mut req = HttpRequest::new(
-            tide::http::Method::Post,
-            Url::parse(&format!("http://example.com{}", req_url)).unwrap(),
-        );
-        req.set_body(body);
-        req.set_content_type(mime::JSON);
-
-        let mut server = tide::with_state(state);
-        server.at("/vouch/:user").post(route);
-
-        let response: Response = server.respond(req).await.unwrap();
-        assert!(
-            response.status().is_client_error(),
-            "Expected a client error for request from an unallowed server"
         );
     }
 
@@ -302,64 +181,6 @@ mod tests {
         assert!(
             response.status().is_client_error(),
             "Expected a client error for invalid signature"
-        );
-    }
-
-    #[async_std::test]
-    async fn test_invalid_proxy_signature() {
-        let state = State::default();
-        let (user_priv, user_address) = random_keypair();
-        let (server_priv, server_addr) = random_keypair();
-        state
-            .server_storage
-            .add_server(
-                server_addr.clone(),
-                ServerInfo {
-                    url: "http://x".into(),
-                    scale: Rational::default(),
-                },
-            )
-            .await
-            .unwrap();
-
-        let user_b = "userB";
-
-        // generate valid user signature
-        let user_sig = vouch_sign(&user_priv, user_b.to_string(), &*state.nonce_manager)
-            .await
-            .expect("User sign");
-
-        // generate valid server signature
-        let server_sig = proxy_sign(&server_priv, &user_sig.signature, &*state.nonce_manager)
-            .await
-            .expect("Server sign");
-
-        // tamper with server signature
-        let mut invalid_server_sig = server_sig.clone();
-        invalid_server_sig.signature.push_str("bad");
-
-        let body = json!({
-            "from": user_address,
-            "signature": user_sig.signature,
-            "nonce": user_sig.nonce,
-            "proxy_signature": invalid_server_sig,
-        });
-
-        let req_url = format!("/vouch/{user_b}");
-        let mut req = HttpRequest::new(
-            tide::http::Method::Post,
-            Url::parse(&format!("http://example.com{}", req_url)).unwrap(),
-        );
-        req.set_body(body);
-        req.set_content_type(mime::JSON);
-
-        let mut server = tide::with_state(state);
-        server.at("/vouch/:user").post(route);
-
-        let response: Response = server.respond(req).await.unwrap();
-        assert!(
-            response.status().is_client_error(),
-            "Expected a client error for invalid server signature"
         );
     }
 }

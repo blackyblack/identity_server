@@ -15,7 +15,6 @@ pub mod error;
 pub mod forget;
 pub mod nonce;
 pub mod proof;
-pub mod proxy;
 pub mod punish;
 pub mod signature;
 pub mod vouch;
