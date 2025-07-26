@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tide::{Request, Response, http::mime};
 
@@ -10,9 +10,16 @@ use crate::{
     verify::{forget::forget_verify, nonce::Nonce},
 };
 
+#[derive(Deserialize, Serialize, Clone)]
+struct FromField {
+    user: UserAddress,
+    #[serde(default)]
+    server: Option<UserAddress>,
+}
+
 #[derive(Deserialize)]
 struct ForgetRequest {
-    from: UserAddress,
+    from: FromField,
     signature: String,
     nonce: Nonce,
 }
@@ -21,11 +28,12 @@ pub async fn route(mut req: Request<State>) -> tide::Result {
     let vouchee = req.param("user")?.to_string();
     let body: ForgetRequest = req.body_json().await?;
     let voucher = body.from;
+    let voucher_user = voucher.user.clone();
 
     {
         if forget_verify(
             body.signature,
-            &voucher,
+            &voucher_user,
             body.nonce,
             vouchee.clone(),
             &*req.state().nonce_manager,
@@ -41,13 +49,13 @@ pub async fn route(mut req: Request<State>) -> tide::Result {
     }
     forget(
         &req.state().identity_service,
-        voucher.clone(),
+        voucher_user.clone(),
         vouchee.clone(),
     )
     .await?;
-    let voucher_balance = balance(&req.state().identity_service, &voucher).await?;
+    let voucher_balance = balance(&req.state().identity_service, &voucher_user).await?;
     let response: HashMap<String, serde_json::Value> = HashMap::from([
-        ("from".into(), voucher.into()),
+        ("from".into(), serde_json::to_value(&voucher)?),
         ("to".into(), vouchee.into()),
         ("idt".into(), voucher_balance.to_string().into()),
         ("nonce".into(), body.nonce.into()),
@@ -100,7 +108,7 @@ mod tests {
             .await
             .expect("Should sign successfully");
         let body = json!({
-            "from": user_address,
+            "from": {"user": user_address},
             "signature": signature.signature,
             "nonce": signature.nonce,
         });
@@ -119,7 +127,8 @@ mod tests {
 
         assert_eq!(response.status(), 200);
         let body: Value = response.body_json().await.unwrap();
-        assert_eq!(body["from"], user_address);
+        assert!(body["from"].get("server").is_none());
+        assert_eq!(body["from"]["user"], user_address);
         assert_eq!(body["to"], user_b);
         // 500 IDT penalty for forgetting
         assert_eq!(body["idt"], "9500");
@@ -152,5 +161,54 @@ mod tests {
             response.status().is_client_error(),
             "Expected a client error for bad request format"
         );
+    }
+
+    #[async_std::test]
+    async fn test_external_server() {
+        let state = State::default();
+        let (private_key, user_address) = random_keypair();
+        let user_b = "userB";
+        prove(
+            &state.identity_service,
+            user_address.clone(),
+            MODERATOR.to_string(),
+            10000,
+            PROOF_ID,
+        )
+        .await
+        .unwrap();
+        vouch(
+            &state.identity_service,
+            user_address.clone(),
+            user_b.to_string(),
+        )
+        .await
+        .unwrap();
+
+        let req_url = format!("/forget/{user_b}");
+        let signature = forget_sign(&private_key, user_b.to_string(), &*state.nonce_manager)
+            .await
+            .expect("Should sign successfully");
+        let body = json!({
+            "from": {"user": user_address, "server": "server1"},
+            "signature": signature.signature,
+            "nonce": signature.nonce,
+        });
+
+        let mut req = HttpRequest::new(
+            tide::http::Method::Post,
+            Url::parse(&format!("http://example.com{}", req_url)).unwrap(),
+        );
+        req.set_body(body);
+        req.set_content_type(mime::JSON);
+
+        let mut server = tide::with_state(state);
+        server.at("/forget/:user").post(route);
+
+        let mut response: Response = server.respond(req).await.unwrap();
+        assert_eq!(response.status(), 200);
+        let body: Value = response.body_json().await.unwrap();
+        assert_eq!(body["from"]["user"], user_address);
+        assert_eq!(body["from"]["server"], "server1");
     }
 }
