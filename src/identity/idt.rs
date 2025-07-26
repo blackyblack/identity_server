@@ -458,7 +458,13 @@ mod tests {
         assert_eq!(balance(&service, &USER_A.to_string()).await.unwrap(), 100);
 
         service
-            .vouch_with_timestamp(user_b.to_string(), USER_A.to_string(), ts - 86400)
+            .vouch_with_timestamp(
+                User::LocalUser {
+                    user: user_b.to_string(),
+                },
+                USER_A.to_string(),
+                ts - 86400,
+            )
             .await
             .unwrap();
         // vouch balance also decays at 1 IDT per day rate

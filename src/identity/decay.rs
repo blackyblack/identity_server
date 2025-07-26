@@ -192,7 +192,13 @@ mod tests {
             0
         );
         service
-            .vouch_with_timestamp(user_b.to_string(), USER_A.to_string(), ts)
+            .vouch_with_timestamp(
+                User::LocalUser {
+                    user: user_b.to_string(),
+                },
+                USER_A.to_string(),
+                ts,
+            )
             .await
             .unwrap();
         assert_eq!(
@@ -202,7 +208,13 @@ mod tests {
             0
         );
         service
-            .vouch_with_timestamp(user_b.to_string(), USER_A.to_string(), ts - 86400)
+            .vouch_with_timestamp(
+                User::LocalUser {
+                    user: user_b.to_string(),
+                },
+                USER_A.to_string(),
+                ts - 86400,
+            )
             .await
             .unwrap();
         assert_eq!(
@@ -212,7 +224,13 @@ mod tests {
             1
         );
         service
-            .vouch_with_timestamp(user_b.to_string(), USER_A.to_string(), ts - 100000)
+            .vouch_with_timestamp(
+                User::LocalUser {
+                    user: user_b.to_string(),
+                },
+                USER_A.to_string(),
+                ts - 100000,
+            )
             .await
             .unwrap();
         assert_eq!(
@@ -222,7 +240,13 @@ mod tests {
             1
         );
         service
-            .vouch_with_timestamp(user_b.to_string(), USER_A.to_string(), ts - 86400 * 2)
+            .vouch_with_timestamp(
+                User::LocalUser {
+                    user: user_b.to_string(),
+                },
+                USER_A.to_string(),
+                ts - 86400 * 2,
+            )
             .await
             .unwrap();
         assert_eq!(

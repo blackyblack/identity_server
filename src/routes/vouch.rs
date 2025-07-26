@@ -1,26 +1,18 @@
 use std::collections::HashMap;
 
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::json;
 use tide::{Request, Response, http::mime};
 
 use crate::{
-    identity::{UserAddress, idt::balance, vouch::vouch},
+    identity::{User, idt::balance},
     routes::State,
     verify::{nonce::Nonce, vouch::vouch_verify},
 };
 
-#[derive(Deserialize, Serialize, Clone)]
-struct FromField {
-    user: UserAddress,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(default)]
-    server: Option<UserAddress>,
-}
-
 #[derive(Deserialize)]
 struct VouchRequest {
-    from: FromField,
+    from: User,
     signature: String,
     nonce: Nonce,
 }
@@ -29,7 +21,7 @@ pub async fn route(mut req: Request<State>) -> tide::Result {
     let vouchee = req.param("user")?.to_string();
     let body: VouchRequest = req.body_json().await?;
     let voucher = body.from;
-    let voucher_user = voucher.user.clone();
+    let voucher_user = voucher.address().clone();
     if vouch_verify(
         body.signature,
         &voucher_user,
@@ -45,12 +37,14 @@ pub async fn route(mut req: Request<State>) -> tide::Result {
             .content_type(mime::JSON)
             .build());
     }
-    vouch(
-        &req.state().identity_service,
-        voucher_user.clone(),
-        vouchee.clone(),
-    )
-    .await?;
+    req.state()
+        .identity_service
+        .vouch_with_timestamp(
+            voucher.clone(),
+            vouchee.clone(),
+            crate::identity::next_timestamp(),
+        )
+        .await?;
     let voucher_balance = balance(&req.state().identity_service, &voucher_user).await?;
     let response: HashMap<String, serde_json::Value> = HashMap::from([
         ("from".into(), serde_json::to_value(&voucher)?),

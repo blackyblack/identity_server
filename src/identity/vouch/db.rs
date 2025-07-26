@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use async_trait::async_trait;
 use sqlx::{AnyPool, Row, any::AnyPoolOptions};
 
-use crate::identity::{UserAddress, error::Error, vouch::storage::VouchStorage};
+use crate::identity::{User, UserAddress, error::Error, vouch::storage::VouchStorage};
 
 pub struct DatabaseVouchStorage {
     pool: AnyPool,
@@ -17,7 +17,7 @@ impl DatabaseVouchStorage {
             .connect(url)
             .await?;
         sqlx::query(
-            "CREATE TABLE IF NOT EXISTS vouches (voucher TEXT NOT NULL, vouchee TEXT NOT NULL, timestamp INTEGER NOT NULL, PRIMARY KEY(voucher, vouchee))"
+            "CREATE TABLE IF NOT EXISTS vouches (voucher TEXT NOT NULL, vouchee TEXT NOT NULL, server TEXT, timestamp INTEGER NOT NULL, PRIMARY KEY(voucher, vouchee, server))"
         )
         .execute(&pool)
         .await?;
@@ -33,24 +33,40 @@ impl DatabaseVouchStorage {
 
 #[async_trait]
 impl VouchStorage for DatabaseVouchStorage {
-    async fn vouch(&self, from: UserAddress, to: UserAddress, timestamp: u64) -> Result<(), Error> {
-        sqlx::query("REPLACE INTO vouches (voucher, vouchee, timestamp) VALUES (?, ?, ?)")
-            .bind(&from)
+    async fn vouch(&self, from: User, to: UserAddress, timestamp: u64) -> Result<(), Error> {
+        let server = from.server().cloned();
+        let addr = from.address().clone();
+        let mut q = sqlx::query(
+            "REPLACE INTO vouches (voucher, vouchee, server, timestamp) VALUES (?, ?, ?, ?)",
+        );
+        q = q
+            .bind(&addr)
             .bind(&to)
-            .bind(timestamp as i64)
-            .execute(&self.pool)
-            .await?;
+            .bind(server.as_deref())
+            .bind(timestamp as i64);
+        q.execute(&self.pool).await?;
         Ok(())
     }
 
     async fn vouchers_with_time(
         &self,
         user: &UserAddress,
+        server: Option<&UserAddress>,
     ) -> Result<HashMap<UserAddress, u64>, Error> {
-        let rows = sqlx::query("SELECT voucher, timestamp FROM vouches WHERE vouchee = ?")
+        let rows = if let Some(server) = server {
+            sqlx::query("SELECT voucher, timestamp FROM vouches WHERE vouchee = ? AND server = ?")
+                .bind(user)
+                .bind(server)
+                .fetch_all(&self.pool)
+                .await?
+        } else {
+            sqlx::query(
+                "SELECT voucher, timestamp FROM vouches WHERE vouchee = ? AND server IS NULL",
+            )
             .bind(user)
             .fetch_all(&self.pool)
-            .await?;
+            .await?
+        };
         let vouchers = rows
             .into_iter()
             .map(|r| (r.get::<String, _>(0), r.get::<i64, _>(1) as u64))
@@ -61,23 +77,41 @@ impl VouchStorage for DatabaseVouchStorage {
     async fn vouchees_with_time(
         &self,
         user: &UserAddress,
+        server: Option<&UserAddress>,
     ) -> Result<HashMap<UserAddress, u64>, Error> {
-        let rows = sqlx::query("SELECT vouchee, timestamp FROM vouches WHERE voucher = ?")
+        let rows = if let Some(server) = server {
+            sqlx::query("SELECT vouchee, timestamp FROM vouches WHERE voucher = ? AND server = ?")
+                .bind(user)
+                .bind(server)
+                .fetch_all(&self.pool)
+                .await?
+        } else {
+            sqlx::query(
+                "SELECT vouchee, timestamp FROM vouches WHERE voucher = ? AND server IS NULL",
+            )
             .bind(user)
             .fetch_all(&self.pool)
-            .await?;
+            .await?
+        };
         Ok(rows
             .into_iter()
             .map(|r| (r.get::<String, _>(0), r.get::<i64, _>(1) as u64))
             .collect())
     }
 
-    async fn remove_vouch(&self, voucher: UserAddress, vouchee: UserAddress) -> Result<(), Error> {
-        sqlx::query("DELETE FROM vouches WHERE voucher = ? AND vouchee = ?")
-            .bind(voucher)
-            .bind(vouchee)
-            .execute(&self.pool)
-            .await?;
+    async fn remove_vouch(&self, voucher: User, vouchee: UserAddress) -> Result<(), Error> {
+        let server = voucher.server().cloned();
+        let addr = voucher.address().clone();
+        let mut q = if server.is_some() {
+            sqlx::query("DELETE FROM vouches WHERE voucher = ? AND vouchee = ? AND server = ?")
+        } else {
+            sqlx::query("DELETE FROM vouches WHERE voucher = ? AND vouchee = ? AND server IS NULL")
+        };
+        q = q.bind(addr).bind(vouchee);
+        if let Some(srv) = server {
+            q = q.bind(srv);
+        }
+        q.execute(&self.pool).await?;
         Ok(())
     }
 }
@@ -94,26 +128,32 @@ mod tests {
 
         assert!(
             storage
-                .vouchers_with_time(&user_b)
+                .vouchers_with_time(&user_b, None)
                 .await
                 .unwrap()
                 .is_empty()
         );
         assert!(
             storage
-                .vouchees_with_time(&user_a)
+                .vouchees_with_time(&user_a, None)
                 .await
                 .unwrap()
                 .is_empty()
         );
 
         storage
-            .vouch(user_a.clone(), user_b.clone(), 1)
+            .vouch(
+                User::LocalUser {
+                    user: user_a.clone(),
+                },
+                user_b.clone(),
+                1,
+            )
             .await
             .unwrap();
         assert_eq!(
             storage
-                .vouchers_with_time(&user_b)
+                .vouchers_with_time(&user_b, None)
                 .await
                 .unwrap()
                 .get(&user_a)
@@ -123,7 +163,7 @@ mod tests {
         );
         assert_eq!(
             storage
-                .vouchees_with_time(&user_a)
+                .vouchees_with_time(&user_a, None)
                 .await
                 .unwrap()
                 .get(&user_b)
@@ -133,7 +173,7 @@ mod tests {
         );
         assert_eq!(
             storage
-                .vouchers_with_time(&user_a)
+                .vouchers_with_time(&user_a, None)
                 .await
                 .unwrap()
                 .get(&user_b),
@@ -141,7 +181,7 @@ mod tests {
         );
         assert_eq!(
             storage
-                .vouchees_with_time(&user_b)
+                .vouchees_with_time(&user_b, None)
                 .await
                 .unwrap()
                 .get(&user_a),
@@ -149,12 +189,18 @@ mod tests {
         );
 
         storage
-            .vouch(user_a.clone(), user_b.clone(), 5)
+            .vouch(
+                User::LocalUser {
+                    user: user_a.clone(),
+                },
+                user_b.clone(),
+                5,
+            )
             .await
             .unwrap();
         assert_eq!(
             storage
-                .vouchers_with_time(&user_b)
+                .vouchers_with_time(&user_b, None)
                 .await
                 .unwrap()
                 .get(&user_a)
@@ -164,19 +210,24 @@ mod tests {
         );
 
         storage
-            .remove_vouch(user_a.clone(), user_b.clone())
+            .remove_vouch(
+                User::LocalUser {
+                    user: user_a.clone(),
+                },
+                user_b.clone(),
+            )
             .await
             .unwrap();
         assert!(
             storage
-                .vouchers_with_time(&user_b)
+                .vouchers_with_time(&user_b, None)
                 .await
                 .unwrap()
                 .is_empty()
         );
         assert!(
             storage
-                .vouchees_with_time(&user_a)
+                .vouchees_with_time(&user_a, None)
                 .await
                 .unwrap()
                 .is_empty()
@@ -184,7 +235,12 @@ mod tests {
 
         // removing a non-existing vouch should not fail
         storage
-            .remove_vouch(user_a.clone(), user_b.clone())
+            .remove_vouch(
+                User::LocalUser {
+                    user: user_a.clone(),
+                },
+                user_b.clone(),
+            )
             .await
             .unwrap();
     }

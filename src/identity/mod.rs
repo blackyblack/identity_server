@@ -20,6 +20,34 @@ pub type UserAddress = String;
 pub type ProofId = u64;
 pub type IdtAmount = u64;
 
+#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[serde(untagged)]
+pub enum User {
+    LocalUser {
+        user: UserAddress,
+    },
+    ExternalUser {
+        user: UserAddress,
+        server: UserAddress,
+    },
+}
+
+impl User {
+    pub fn address(&self) -> &UserAddress {
+        match self {
+            User::LocalUser { user } => user,
+            User::ExternalUser { user, .. } => user,
+        }
+    }
+
+    pub fn server(&self) -> Option<&UserAddress> {
+        match self {
+            User::LocalUser { .. } => None,
+            User::ExternalUser { server, .. } => Some(server),
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct ModeratorProof {
     pub moderator: UserAddress,

@@ -1,26 +1,18 @@
 use std::collections::HashMap;
 
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::json;
 use tide::{Request, Response, http::mime};
 
 use crate::{
-    identity::{UserAddress, forget::forget, idt::balance},
+    identity::{User, idt::balance},
     routes::State,
     verify::{forget::forget_verify, nonce::Nonce},
 };
 
-#[derive(Deserialize, Serialize, Clone)]
-struct FromField {
-    user: UserAddress,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(default)]
-    server: Option<UserAddress>,
-}
-
 #[derive(Deserialize)]
 struct ForgetRequest {
-    from: FromField,
+    from: User,
     signature: String,
     nonce: Nonce,
 }
@@ -29,7 +21,7 @@ pub async fn route(mut req: Request<State>) -> tide::Result {
     let vouchee = req.param("user")?.to_string();
     let body: ForgetRequest = req.body_json().await?;
     let voucher = body.from;
-    let voucher_user = voucher.user.clone();
+    let voucher_user = voucher.address().clone();
 
     {
         if forget_verify(
@@ -48,12 +40,14 @@ pub async fn route(mut req: Request<State>) -> tide::Result {
                 .build());
         }
     }
-    forget(
-        &req.state().identity_service,
-        voucher_user.clone(),
-        vouchee.clone(),
-    )
-    .await?;
+    req.state()
+        .identity_service
+        .forget_with_timestamp(
+            voucher.clone(),
+            vouchee.clone(),
+            crate::identity::next_timestamp(),
+        )
+        .await?;
     let voucher_balance = balance(&req.state().identity_service, &voucher_user).await?;
     let response: HashMap<String, serde_json::Value> = HashMap::from([
         ("from".into(), serde_json::to_value(&voucher)?),
@@ -98,7 +92,9 @@ mod tests {
         .unwrap();
         vouch(
             &state.identity_service,
-            user_address.clone(),
+            User::LocalUser {
+                user: user_address.clone(),
+            },
             user_b.to_string(),
         )
         .await
@@ -180,7 +176,9 @@ mod tests {
         .unwrap();
         vouch(
             &state.identity_service,
-            user_address.clone(),
+            User::LocalUser {
+                user: user_address.clone(),
+            },
             user_b.to_string(),
         )
         .await
