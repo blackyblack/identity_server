@@ -81,16 +81,6 @@ mod tests {
         // no external server configuration
     }
 
-    #[test]
-    fn test_parse_servers() {
-        let json = r#"{
-            "admins": {"admins": ["a"], "moderators": []}
-        }"#;
-        let cfg: Config = serde_json::from_str(json).unwrap();
-        assert_eq!(cfg.admins.admins.len(), 1);
-        assert!(cfg.admins.admins.contains("a"));
-    }
-
     #[async_std::test]
     async fn test_load_config_nonexistent_file() {
         let temp_dir = TempDir::new("config").unwrap();

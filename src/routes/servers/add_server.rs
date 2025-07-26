@@ -6,6 +6,7 @@ use tide::{Request, Response, http::mime};
 
 use crate::{
     identity::UserAddress,
+    numbers::Rational,
     routes::{State, verify_admin_action},
     servers::storage::ServerInfo,
     verify::{admins::admin_set_server_message_prefix, nonce::Nonce},
@@ -18,7 +19,7 @@ struct ServerRequest {
     nonce: Nonce,
     address: UserAddress,
     url: String,
-    scale: f64,
+    scale: Rational,
 }
 
 pub async fn route(mut req: Request<State>) -> tide::Result {
@@ -39,8 +40,8 @@ pub async fn route(mut req: Request<State>) -> tide::Result {
     }
 
     let info = ServerInfo {
-        url: body.url,
-        scale: body.scale,
+        url: body.url.clone(),
+        scale: body.scale.clone(),
     };
     if req
         .state()
@@ -59,6 +60,8 @@ pub async fn route(mut req: Request<State>) -> tide::Result {
         ("server".into(), body.address.into()),
         ("from".into(), sender.into()),
         ("nonce".into(), body.nonce.into()),
+        ("url".into(), body.url.into()),
+        ("scale".into(), serde_json::to_value(body.scale)?),
     ]);
 
     let response = Response::builder(200)
@@ -76,6 +79,7 @@ mod tests {
     use super::*;
     use crate::{
         admins::InMemoryAdminStorage,
+        numbers::Rational,
         verify::{random_keypair, sign_message},
     };
     use serde_json::Value;
@@ -96,14 +100,14 @@ mod tests {
         let signature = sign_message(&admin_priv, &message_prefix, &*state.nonce_manager)
             .await
             .expect("Should sign");
+        let server_url = "http://example.com".to_string();
         let body = json!({
             "from": signature.signer,
             "signature": signature.signature,
             "nonce": signature.nonce,
             "address": "server1",
-            "url": "http://example.com",
-            // TODO: use integer arithmetics: "scale": {"numerator": 1, "denominator": 1}
-            "scale": 1.0
+            "url": server_url.clone(),
+            "scale": Rational::default(),
         });
 
         let mut req = HttpRequest::new(
@@ -120,10 +124,13 @@ mod tests {
 
         assert_eq!(response.status(), 200);
         let body: Value = response.body_json().await.unwrap();
-        // TODO: add URL to response
         assert_eq!(body["server"], "server1");
         assert_eq!(body["from"], admin_addr);
         assert_eq!(body["nonce"], signature.nonce);
+        assert_eq!(body["url"], server_url);
+        let scale: Rational =
+            serde_json::from_value(body["scale"].clone()).expect("failed to deserialize scale");
+        assert_eq!(scale, Rational::default());
         assert!(
             state
                 .server_storage
@@ -156,7 +163,7 @@ mod tests {
             "nonce": signature.nonce,
             "address": "server1",
             "url": "http://example.com",
-            "scale": 1.0
+            "scale": Rational::default(),
         });
 
         let mut req = HttpRequest::new(

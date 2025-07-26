@@ -1,13 +1,16 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::identity::{
-    IdentityService, IdtAmount, ModeratorProof, ProofId, SystemPenalty, UserAddress,
-    decay::{balance_after_decay, moderator_penalty_decay, system_penalty_decay},
-    error::Error,
-    next_timestamp,
-    proof::MAX_IDT_BY_PROOF,
-    tree_walk::{ChildrenSelector, Visitor, walk_tree},
-    vouch::vouchees,
+use crate::{
+    identity::{
+        IdentityService, IdtAmount, ModeratorProof, ProofId, SystemPenalty, UserAddress,
+        decay::{balance_after_decay, moderator_penalty_decay, system_penalty_decay},
+        error::Error,
+        next_timestamp,
+        proof::MAX_IDT_BY_PROOF,
+        tree_walk::{ChildrenSelector, Visitor, walk_tree},
+        vouch::vouchees,
+    },
+    numbers::Rational,
 };
 
 pub mod db;
@@ -56,9 +59,12 @@ async fn penalty_from_vouchees(
         };
         penalty += vouchee_penalty_limited;
     }
-    Ok(penalty
-        .saturating_mul(PENALTY_VOUCHEE_WEIGHT_RATIO.0.into())
-        .saturating_div(PENALTY_VOUCHEE_WEIGHT_RATIO.1.into()))
+    let penalty_scale = Rational::new(
+        PENALTY_VOUCHEE_WEIGHT_RATIO.0,
+        PENALTY_VOUCHEE_WEIGHT_RATIO.1,
+    )
+    .expect("PENALTY_VOUCHEE_WEIGHT_RATIO denominator must not be zero");
+    Ok(penalty_scale.mul(penalty))
 }
 
 async fn vouchee_penalty(
@@ -141,10 +147,15 @@ impl IdentityService {
         vouchee: UserAddress,
         timestamp: u64,
     ) -> Result<(), Error> {
-        let vouchee_penalty = penalty(self, &vouchee)
-            .await?
-            .saturating_mul(PENALTY_VOUCHEE_WEIGHT_RATIO.0.into())
-            .saturating_div(PENALTY_VOUCHEE_WEIGHT_RATIO.1.into());
+        let vouchee_penalty = {
+            let penalty_scale = Rational::new(
+                PENALTY_VOUCHEE_WEIGHT_RATIO.0,
+                PENALTY_VOUCHEE_WEIGHT_RATIO.1,
+            )
+            .expect("PENALTY_VOUCHEE_WEIGHT_RATIO denominator must not be zero");
+            let vouchee_penalty = penalty(self, &vouchee).await?;
+            penalty_scale.mul(vouchee_penalty)
+        };
         let event = SystemPenalty {
             amount: FORGET_PENALTY + vouchee_penalty,
             timestamp,
