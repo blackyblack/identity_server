@@ -38,24 +38,22 @@ pub async fn route(mut req: Request<State>) -> tide::Result {
             .build());
     }
 
+    if punish_verify(
+        body.signature,
+        &moderator,
+        body.nonce,
+        user.clone(),
+        amount,
+        proof_id,
+        &*req.state().nonce_manager,
+    )
+    .await
+    .is_err()
     {
-        if punish_verify(
-            body.signature,
-            &moderator,
-            body.nonce,
-            user.clone(),
-            amount,
-            proof_id,
-            &*req.state().nonce_manager,
-        )
-        .await
-        .is_err()
-        {
-            return Ok(Response::builder(400)
-                .body(json!({"error": "signature verification failed"}))
-                .content_type(mime::JSON)
-                .build());
-        }
+        return Ok(Response::builder(400)
+            .body(json!({"error": "signature verification failed"}))
+            .content_type(mime::JSON)
+            .build());
     }
 
     punish(
