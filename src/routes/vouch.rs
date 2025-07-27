@@ -30,6 +30,7 @@ pub async fn route(mut req: Request<State>) -> tide::Result {
     let body: VouchRequest = req.body_json().await?;
     let voucher = body.from;
     let voucher_user = voucher.user.clone();
+
     if vouch_verify(
         body.signature,
         &voucher_user,

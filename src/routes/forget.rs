@@ -31,23 +31,22 @@ pub async fn route(mut req: Request<State>) -> tide::Result {
     let voucher = body.from;
     let voucher_user = voucher.user.clone();
 
+    if forget_verify(
+        body.signature,
+        &voucher_user,
+        body.nonce,
+        vouchee.clone(),
+        &*req.state().nonce_manager,
+    )
+    .await
+    .is_err()
     {
-        if forget_verify(
-            body.signature,
-            &voucher_user,
-            body.nonce,
-            vouchee.clone(),
-            &*req.state().nonce_manager,
-        )
-        .await
-        .is_err()
-        {
-            return Ok(Response::builder(400)
-                .body(json!({"error": "signature verification failed"}))
-                .content_type(mime::JSON)
-                .build());
-        }
+        return Ok(Response::builder(400)
+            .body(json!({"error": "signature verification failed"}))
+            .content_type(mime::JSON)
+            .build());
     }
+
     forget(
         &req.state().identity_service,
         voucher_user.clone(),
