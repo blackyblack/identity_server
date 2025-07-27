@@ -12,6 +12,7 @@ use crate::{
         proof::{db::DatabaseProofStorage, storage::ProofStorage},
         punish::{db::DatabasePenaltyStorage, storage::PenaltyStorage},
         vouch::{db::DatabaseVouchStorage, storage::VouchStorage},
+        vouch_external::{db::DatabaseExternalVouchStorage, storage::ExternalVouchStorage},
     },
     servers::{db::DatabaseServerStorage, storage::ServerStorage},
     verify::nonce::{NonceManager, db::DatabaseNonceManager},
@@ -24,6 +25,7 @@ pub const DEFAULT_MYSQL_DATABASE: &str = "identity";
 
 pub struct Storage {
     pub vouch_storage: Arc<dyn VouchStorage>,
+    pub external_vouch_storage: Arc<dyn ExternalVouchStorage>,
     pub proof_storage: Arc<dyn ProofStorage>,
     pub penalty_storage: Arc<dyn PenaltyStorage>,
     pub admin_storage: Arc<dyn AdminStorage>,
@@ -37,6 +39,9 @@ pub async fn create_database_storage(
 ) -> Result<Storage, Error> {
     let db_url = setup_database_url();
     let vouch_storage_connect = DatabaseVouchStorage::new(&db_url)
+        .await
+        .map_err(|e| Error::new(ErrorKind::NotConnected, e.to_string()))?;
+    let external_vouch_storage_connect = DatabaseExternalVouchStorage::new(&db_url)
         .await
         .map_err(|e| Error::new(ErrorKind::NotConnected, e.to_string()))?;
     let proof_storage_connect = DatabaseProofStorage::new(&db_url)
@@ -56,6 +61,7 @@ pub async fn create_database_storage(
         .map_err(|e| Error::new(ErrorKind::NotConnected, e.to_string()))?;
     Ok(Storage {
         vouch_storage: Arc::new(vouch_storage_connect),
+        external_vouch_storage: Arc::new(external_vouch_storage_connect),
         proof_storage: Arc::new(proof_storage_connect),
         penalty_storage: Arc::new(penalty_storage_connect),
         admin_storage: Arc::new(admin_storage_connect),

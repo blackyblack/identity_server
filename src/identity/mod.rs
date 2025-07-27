@@ -4,6 +4,7 @@ use crate::identity::{
     proof::storage::{InMemoryProofStorage, ProofStorage},
     punish::storage::{InMemoryPenaltyStorage, PenaltyStorage},
     vouch::storage::{InMemoryVouchStorage, VouchStorage},
+    vouch_external::storage::{ExternalVouchStorage, InMemoryExternalVouchStorage},
 };
 
 mod decay;
@@ -15,6 +16,7 @@ pub mod proof;
 pub mod punish;
 mod tree_walk;
 pub mod vouch;
+pub mod vouch_external;
 
 pub type UserAddress = String;
 pub type ProofId = u64;
@@ -38,6 +40,7 @@ pub struct SystemPenalty {
 #[derive(Clone)]
 pub struct IdentityService {
     pub vouches: Arc<dyn VouchStorage>,
+    pub external_vouches: Arc<dyn ExternalVouchStorage>,
     pub proofs: Arc<dyn ProofStorage>,
     pub penalties: Arc<dyn PenaltyStorage>,
 }
@@ -46,6 +49,7 @@ impl Default for IdentityService {
     fn default() -> Self {
         Self {
             vouches: Arc::new(InMemoryVouchStorage::default()),
+            external_vouches: Arc::new(InMemoryExternalVouchStorage::default()),
             proofs: Arc::new(InMemoryProofStorage::default()),
             penalties: Arc::new(InMemoryPenaltyStorage::default()),
         }

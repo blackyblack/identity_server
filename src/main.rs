@@ -75,6 +75,7 @@ async fn main() {
 
     let identity_service = IdentityService {
         vouches: storage.vouch_storage,
+        external_vouches: storage.external_vouch_storage,
         proofs: storage.proof_storage,
         penalties: storage.penalty_storage,
     };

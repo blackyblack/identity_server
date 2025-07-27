@@ -5,7 +5,7 @@ use serde_json::json;
 use tide::{Request, Response, http::mime};
 
 use crate::{
-    identity::{UserAddress, idt::balance, vouch::vouch},
+    identity::{UserAddress, idt::balance, vouch::vouch, vouch_external::vouch_external},
     routes::State,
     verify::{nonce::Nonce, vouch::vouch_verify},
 };
@@ -45,12 +45,22 @@ pub async fn route(mut req: Request<State>) -> tide::Result {
             .content_type(mime::JSON)
             .build());
     }
-    vouch(
-        &req.state().identity_service,
-        voucher_user.clone(),
-        vouchee.clone(),
-    )
-    .await?;
+    if let Some(server) = voucher.server.clone() {
+        vouch_external(
+            &req.state().identity_service,
+            server,
+            voucher_user.clone(),
+            vouchee.clone(),
+        )
+        .await?;
+    } else {
+        vouch(
+            &req.state().identity_service,
+            voucher_user.clone(),
+            vouchee.clone(),
+        )
+        .await?;
+    }
     let voucher_balance = balance(&req.state().identity_service, &voucher_user).await?;
     let response: HashMap<String, serde_json::Value> = HashMap::from([
         ("from".into(), serde_json::to_value(&voucher)?),
