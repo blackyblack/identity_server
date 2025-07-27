@@ -40,6 +40,15 @@ impl IdentityService {
             .collect();
         Ok(vouchers)
     }
+
+    pub async fn remove_external_vouch(
+        &self,
+        server: UserAddress,
+        from: UserAddress,
+        to: UserAddress,
+    ) -> Result<(), Error> {
+        self.external_vouches.remove_vouch(server, from, to).await
+    }
 }
 
 pub async fn vouch_external(
@@ -51,6 +60,15 @@ pub async fn vouch_external(
     service
         .vouch_external_with_timestamp(server, from, to, next_timestamp())
         .await
+}
+
+pub async fn forget_external(
+    service: &IdentityService,
+    server: UserAddress,
+    from: UserAddress,
+    to: UserAddress,
+) -> Result<(), Error> {
+    service.remove_external_vouch(server, from, to).await
 }
 
 #[cfg(test)]

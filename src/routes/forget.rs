@@ -5,7 +5,7 @@ use serde_json::json;
 use tide::{Request, Response, http::mime};
 
 use crate::{
-    identity::{UserAddress, forget::forget, idt::balance},
+    identity::{UserAddress, forget::forget, idt::balance, vouch_external::forget_external},
     routes::State,
     verify::{forget::forget_verify, nonce::Nonce},
 };
@@ -47,12 +47,22 @@ pub async fn route(mut req: Request<State>) -> tide::Result {
             .build());
     }
 
-    forget(
-        &req.state().identity_service,
-        voucher_user.clone(),
-        vouchee.clone(),
-    )
-    .await?;
+    if let Some(server) = voucher.server.clone() {
+        forget_external(
+            &req.state().identity_service,
+            server,
+            voucher_user.clone(),
+            vouchee.clone(),
+        )
+        .await?;
+    } else {
+        forget(
+            &req.state().identity_service,
+            voucher_user.clone(),
+            vouchee.clone(),
+        )
+        .await?;
+    }
     let voucher_balance = balance(&req.state().identity_service, &voucher_user).await?;
     let response: HashMap<String, serde_json::Value> = HashMap::from([
         ("from".into(), serde_json::to_value(&voucher)?),
@@ -75,6 +85,7 @@ mod tests {
             proof::prove,
             tests::{MODERATOR, PROOF_ID, USER_A},
             vouch::vouch,
+            vouch_external::vouch_external,
         },
         verify::{forget::forget_sign, random_keypair},
     };
@@ -95,8 +106,9 @@ mod tests {
         )
         .await
         .unwrap();
-        vouch(
+        vouch_external(
             &state.identity_service,
+            "server1".to_string(),
             user_address.clone(),
             user_b.to_string(),
         )
@@ -202,7 +214,7 @@ mod tests {
         req.set_body(body);
         req.set_content_type(mime::JSON);
 
-        let mut server = tide::with_state(state);
+        let mut server = tide::with_state(state.clone());
         server.at("/forget/:user").post(route);
 
         let mut response: Response = server.respond(req).await.unwrap();
@@ -210,5 +222,14 @@ mod tests {
         let body: Value = response.body_json().await.unwrap();
         assert_eq!(body["from"]["user"], user_address);
         assert_eq!(body["from"]["server"], "server1");
+        // ensure vouch is removed from external storage
+        assert!(
+            state
+                .identity_service
+                .vouchers_external(&user_b.to_string())
+                .await
+                .unwrap()
+                .is_empty()
+        );
     }
 }
